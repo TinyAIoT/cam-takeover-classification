@@ -1,0 +1,17 @@
+# This file contains the configuration for the training process + optional fine-tuning
+batch_size: 96
+training_epochs: 2
+dataset_path: /home/paula/Documents/reedu/TinyAIoT/cam-takeover-detection/data/demo # plant-village, birds
+output_path: /home/paula/Documents/reedu/TinyAIoT/cam-takeover-detection/training/output
+img_height: 96
+img_num_channels: 3
+img_width: 96
+model_name: torch_squeezy
+model_type: squeezenet # shufflenet, mobilenet, efficientnet, densenet, squeezenet
+patience: 5
+num_workers: 4
+# The following parameters are used for fine-tuning
+fine_tune: False
+fine_tune_epochs: 10
+fine_tuning_learning_rate: 0.00001
+model_task: classify

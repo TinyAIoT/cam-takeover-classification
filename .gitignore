@@ -1,0 +1,7 @@
+data/classified
+data/demo
+data/real_raw
+*/output
+*/__pycache__
+*/.vscode
+*/managed_components
