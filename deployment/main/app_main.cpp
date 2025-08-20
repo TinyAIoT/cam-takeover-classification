@@ -40,7 +40,7 @@ extern const uint8_t espdl_model[] asm("_binary_squeezenet_espdl_start");
 // Set to true to take a camera picture, else make sure to add an img
 #define TAKE_PICTURE false
 #define ESP_CAMERA_SUPPORTED true
-#define SAVE_TO_SDCARD false
+#define SAVE_TO_SDCARD true
 
 #if SAVE_TO_SDCARD
 #include "sd_pins.h"
@@ -740,7 +740,6 @@ extern "C" void app_main(void) {
 #else
 #if SAVE_TO_SDCARD
 
-    dl::image::img_t img;
     // check if there is a folder called "to classify" on the SD card
     ESP_LOGI("???", "1");
     const char* to_classify_path = "/sdcard/to_classify";
@@ -820,113 +819,117 @@ extern "C" void app_main(void) {
             // Create JPEG structure
             dl::image::jpeg_img_t jpeg_img;
             jpeg_img.data = jpeg_data;
+            jpeg_img.width = 96; // Width will be set after decoding
+            jpeg_img.height = 96; // Height will be set after decoding
             jpeg_img.data_size = file_size;
             
             // Convert JPEG to RGB888
+            dl::image::img_t img;
             img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-            sw_decode_jpeg(jpeg_img, img, true);
+            esp_err_t decode_err = dl::image::sw_decode_jpeg(jpeg_img, img, true);
             
-        //     // Free JPEG data
-        //     if (jpeg_img.data) {
-        //         free(jpeg_img.data);
-        //         jpeg_img.data = nullptr;
-        //     }
+            // Free JPEG data
+            if (jpeg_img.data) {
+                free(jpeg_img.data);
+                jpeg_img.data = nullptr;
+            }
             
-        //     if (decode_err != ESP_OK) {
-        //         ESP_LOGE("SD", "Failed to decode JPEG: %s", entry->d_name);
-        //         continue;
-        //     }
+            if (decode_err != ESP_OK) {
+                ESP_LOGE("SD", "Failed to decode JPEG: %s", entry->d_name);
+                continue;
+            }
             
-        //     // Run inference on image
-        //     const auto best = run_inference(img);
-        //     if (best.cat_name) {
-        //         ESP_LOGI("CLS", "Best: %s (score: %f) for image: %s", best.cat_name, best.score, entry->d_name);
-        //     }
+            // Run inference on image
+            const auto best = run_inference(img);
+            if (best.cat_name) {
+                ESP_LOGI("CLS", "Best: %s (score: %f) for image: %s", best.cat_name, best.score, entry->d_name);
+            }
             
-        //     // Encode back to JPEG
-        //     dl::image::jpeg_img_t encoded_jpeg_img;
-        //     jpeg_enc_config_t enc_config = {
-        //         .width = img.width,
-        //         .height = img.height,
-        //         .src_type = JPEG_PIXEL_FORMAT_RGB888,
-        //         .subsampling = JPEG_SUBSAMPLE_444,
-        //         .quality = 80,
-        //         .rotate = JPEG_ROTATE_0D,
-        //         .task_enable = true,
-        //         .hfm_task_priority = 13,
-        //         .hfm_task_core = 1,
-        //     };
+            // Encode back to JPEG
+            dl::image::jpeg_img_t encoded_jpeg_img;
+            jpeg_enc_config_t enc_config = {
+                .width = img.width,
+                .height = img.height,
+                .src_type = JPEG_PIXEL_FORMAT_RGB888,
+                .subsampling = JPEG_SUBSAMPLE_444,
+                .quality = 80,
+                .rotate = JPEG_ROTATE_0D,
+                .task_enable = true,
+                .hfm_task_priority = 13,
+                .hfm_task_core = 1,
+            };
             
-        //     jpeg_error_t encode_ret = encode_img_to_jpeg(&img, &encoded_jpeg_img, enc_config);
+            jpeg_error_t encode_ret = encode_img_to_jpeg(&img, &encoded_jpeg_img, enc_config);
             
-        //     // Free image data
-        //     if (img.data) {
-        //         free(img.data);
-        //         img.data = nullptr;
-        //     }
+            // Free image data
+            if (img.data) {
+                free(img.data);
+                img.data = nullptr;
+            }
             
-        //     if (encode_ret == JPEG_ERR_OK) {
-        //         // Save classified image with prediction result
-        //         char output_filename[512];
-        //         const char* basename = entry->d_name;
-        //         const char* dot = strrchr(basename, '.');
-        //         int name_ret;
-        //         if (dot) {
-        //             size_t name_len = dot - basename;
-        //             char name_without_ext[256];
-        //             if (name_len >= sizeof(name_without_ext)) {
-        //                 ESP_LOGE("SD", "Filename too long: %s", entry->d_name);
-        //                 if (encoded_jpeg_img.data) {
-        //                     heap_caps_free(encoded_jpeg_img.data);
-        //                 }
-        //                 continue;
-        //             }
-        //             strncpy(name_without_ext, basename, name_len);
-        //             name_without_ext[name_len] = '\0';
+            // TODO: save classification results to sd-card
+            // if (encode_ret == JPEG_ERR_OK) {
+            //     // Save classified image with prediction result
+            //     char output_filename[512];
+            //     const char* basename = entry->d_name;
+            //     const char* dot = strrchr(basename, '.');
+            //     int name_ret;
+            //     if (dot) {
+            //         size_t name_len = dot - basename;
+            //         char name_without_ext[256];
+            //         if (name_len >= sizeof(name_without_ext)) {
+            //             ESP_LOGE("SD", "Filename too long: %s", entry->d_name);
+            //             if (encoded_jpeg_img.data) {
+            //                 heap_caps_free(encoded_jpeg_img.data);
+            //             }
+            //             continue;
+            //         }
+            //         strncpy(name_without_ext, basename, name_len);
+            //         name_without_ext[name_len] = '\0';
                     
-        //             name_ret = snprintf(output_filename, sizeof(output_filename), 
-        //                      "%s_%s_%.4f.jpg", name_without_ext, 
-        //                      best.cat_name ? best.cat_name : "unknown", 
-        //                      best.cat_name ? best.score : 0.0f);
-        //         } else {
-        //             name_ret = snprintf(output_filename, sizeof(output_filename), 
-        //                      "%s_%s_%.4f.jpg", basename,
-        //                      best.cat_name ? best.cat_name : "unknown", 
-        //                      best.cat_name ? best.score : 0.0f);
-        //         }
+            //         name_ret = snprintf(output_filename, sizeof(output_filename), 
+            //                  "%s_%s_%.4f.jpg", name_without_ext, 
+            //                  best.cat_name ? best.cat_name : "unknown", 
+            //                  best.cat_name ? best.score : 0.0f);
+            //     } else {
+            //         name_ret = snprintf(output_filename, sizeof(output_filename), 
+            //                  "%s_%s_%.4f.jpg", basename,
+            //                  best.cat_name ? best.cat_name : "unknown", 
+            //                  best.cat_name ? best.score : 0.0f);
+            //     }
                 
-        //         if (name_ret >= sizeof(output_filename)) {
-        //             ESP_LOGE("SD", "Output filename too long for: %s", entry->d_name);
-        //             if (encoded_jpeg_img.data) {
-        //                 heap_caps_free(encoded_jpeg_img.data);
-        //             }
-        //             continue;
-        //         }
+            //     if (name_ret >= sizeof(output_filename)) {
+            //         ESP_LOGE("SD", "Output filename too long for: %s", entry->d_name);
+            //         if (encoded_jpeg_img.data) {
+            //             heap_caps_free(encoded_jpeg_img.data);
+            //         }
+            //         continue;
+            //     }
                 
-        //         char output_filepath[512];
-        //         int ret2 = snprintf(output_filepath, sizeof(output_filepath), "%s/%s", classified_path, output_filename);
-        //         if (ret2 >= sizeof(output_filepath)) {
-        //             ESP_LOGE("SD", "Output filepath too long for: %s", output_filename);
-        //             if (encoded_jpeg_img.data) {
-        //                 heap_caps_free(encoded_jpeg_img.data);
-        //             }
-        //             continue;
-        //         }
+            //     char output_filepath[512];
+            //     int ret2 = snprintf(output_filepath, sizeof(output_filepath), "%s/%s", classified_path, output_filename);
+            //     if (ret2 >= sizeof(output_filepath)) {
+            //         ESP_LOGE("SD", "Output filepath too long for: %s", output_filename);
+            //         if (encoded_jpeg_img.data) {
+            //             heap_caps_free(encoded_jpeg_img.data);
+            //         }
+            //         continue;
+            //     }
                 
-        //         esp_err_t write_err = dl::image::write_jpeg(encoded_jpeg_img, output_filepath);
-        //         if (write_err == ESP_OK) {
-        //             ESP_LOGI("SD", "Classified image saved: %s", output_filename);
-        //         } else {
-        //             ESP_LOGE("SD", "Failed to save classified image: %s", output_filename);
-        //         }
+            //     esp_err_t write_err = dl::image::write_jpeg(encoded_jpeg_img, output_filepath);
+            //     if (write_err == ESP_OK) {
+            //         ESP_LOGI("SD", "Classified image saved: %s", output_filename);
+            //     } else {
+            //         ESP_LOGE("SD", "Failed to save classified image: %s", output_filename);
+            //     }
                 
-        //         // Free JPEG data
-        //         if (encoded_jpeg_img.data) {
-        //             heap_caps_free(encoded_jpeg_img.data);
-        //         }
-        //     } else {
-        //         ESP_LOGE("JPEG", "Failed to encode image: %s", entry->d_name);
-        //     }
+            //     // Free JPEG data
+            //     if (encoded_jpeg_img.data) {
+            //         heap_caps_free(encoded_jpeg_img.data);
+            //     }
+            // } else {
+            //     ESP_LOGE("JPEG", "Failed to encode image: %s", entry->d_name);
+            // }
         }
         
         closedir(dir);
