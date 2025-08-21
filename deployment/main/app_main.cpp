@@ -742,10 +742,6 @@ extern "C" void app_main(void) {
 
     // check if there is a folder called "to classify" on the SD card
     const char* to_classify_path = "/sdcard/to_classify";
-    const char* classified_path = "/sdcard/classified";
-    
-    // Create classified directory if it doesn't exist
-    createDir(classified_path);
     
     DIR *dir = opendir(to_classify_path);
     if (dir) {
@@ -759,10 +755,15 @@ extern "C" void app_main(void) {
             }
             
             // Build full file path
-            char input_filepath[512];
-            int ret = snprintf(input_filepath, sizeof(input_filepath), "%s/%s", to_classify_path, entry->d_name);
-            if (ret >= sizeof(input_filepath)) {
+            char *input_filepath = (char*)malloc(512);
+            if (!input_filepath) {
+                ESP_LOGE("SD", "Failed to allocate memory for filepath");
+                continue;
+            }
+            int ret = snprintf(input_filepath, 512, "%s/%s", to_classify_path, entry->d_name);
+            if (ret >= 512) {
                 ESP_LOGE("SD", "Filepath too long for: %s", entry->d_name);
+                free(input_filepath);
                 continue;
             }
             
@@ -770,6 +771,7 @@ extern "C" void app_main(void) {
             const char* ext = strrchr(entry->d_name, '.');
             if (!ext || (strcasecmp(ext, ".jpg") != 0 && strcasecmp(ext, ".jpeg") != 0)) {
                 ESP_LOGW("SD", "Skipping non-JPEG file: %s", entry->d_name);
+                free(input_filepath);
                 continue;
             }
             
@@ -779,8 +781,12 @@ extern "C" void app_main(void) {
             FILE* file = fopen(input_filepath, "rb");
             if (!file) {
                 ESP_LOGE("SD", "Failed to open JPEG file: %s", entry->d_name);
+                free(input_filepath);
                 continue;
             }
+            
+            // We can free input_filepath now since file is opened
+            free(input_filepath);
             
             // Get file size
             fseek(file, 0, SEEK_END);
@@ -861,69 +867,94 @@ extern "C" void app_main(void) {
                 img.data = nullptr;
             }
             
-            // TODO: save classification results to sd-card
-            // if (encode_ret == JPEG_ERR_OK) {
-            //     // Save classified image with prediction result
-            //     char output_filename[512];
-            //     const char* basename = entry->d_name;
-            //     const char* dot = strrchr(basename, '.');
-            //     int name_ret;
-            //     if (dot) {
-            //         size_t name_len = dot - basename;
-            //         char name_without_ext[256];
-            //         if (name_len >= sizeof(name_without_ext)) {
-            //             ESP_LOGE("SD", "Filename too long: %s", entry->d_name);
-            //             if (encoded_jpeg_img.data) {
-            //                 heap_caps_free(encoded_jpeg_img.data);
-            //             }
-            //             continue;
-            //         }
-            //         strncpy(name_without_ext, basename, name_len);
-            //         name_without_ext[name_len] = '\0';
+            if (encode_ret == JPEG_ERR_OK) {
+                // Save classified image with prediction result
+                char *output_filename = (char*)malloc(512);
+                if (!output_filename) {
+                    ESP_LOGE("SD", "Failed to allocate memory for output filename");
+                    if (encoded_jpeg_img.data) {
+                        heap_caps_free(encoded_jpeg_img.data);
+                    }
+                    continue;
+                }
+                
+                const char* basename = entry->d_name;
+                const char* dot = strrchr(basename, '.');
+                int name_ret;
+                if (dot) {
+                    size_t name_len = dot - basename;
+                    char *name_without_ext = (char*)malloc(256);
+                    if (!name_without_ext) {
+                        ESP_LOGE("SD", "Failed to allocate memory for name_without_ext");
+                        free(output_filename);
+                        if (encoded_jpeg_img.data) {
+                            heap_caps_free(encoded_jpeg_img.data);
+                        }
+                        continue;
+                    }
                     
-            //         name_ret = snprintf(output_filename, sizeof(output_filename), 
-            //                  "%s_%s_%.4f.jpg", name_without_ext, 
-            //                  best.cat_name ? best.cat_name : "unknown", 
-            //                  best.cat_name ? best.score : 0.0f);
-            //     } else {
-            //         name_ret = snprintf(output_filename, sizeof(output_filename), 
-            //                  "%s_%s_%.4f.jpg", basename,
-            //                  best.cat_name ? best.cat_name : "unknown", 
-            //                  best.cat_name ? best.score : 0.0f);
-            //     }
+                    if (name_len >= 256) {
+                        ESP_LOGE("SD", "Filename too long: %s", entry->d_name);
+                        free(name_without_ext);
+                        free(output_filename);
+                        if (encoded_jpeg_img.data) {
+                            heap_caps_free(encoded_jpeg_img.data);
+                        }
+                        continue;
+                    }
+                    strncpy(name_without_ext, basename, name_len);
+                    name_without_ext[name_len] = '\0';
+                    
+                    name_ret = snprintf(output_filename, 512, 
+                             "%s_%s_%.4f.jpg", name_without_ext, 
+                             best.cat_name ? best.cat_name : "unknown", 
+                             best.cat_name ? best.score : 0.0f);
+                    
+                    free(name_without_ext);
+                } else {
+                    name_ret = snprintf(output_filename, 512, 
+                             "%s_%s_%.2f.jpg", basename,
+                             best.cat_name ? best.cat_name : "unknown", 
+                             best.cat_name ? best.score : 0.0f);
+                }
                 
-            //     if (name_ret >= sizeof(output_filename)) {
-            //         ESP_LOGE("SD", "Output filename too long for: %s", entry->d_name);
-            //         if (encoded_jpeg_img.data) {
-            //             heap_caps_free(encoded_jpeg_img.data);
-            //         }
-            //         continue;
-            //     }
+                if (name_ret >= 512) {
+                    ESP_LOGE("SD", "Output filename too long for: %s", entry->d_name);
+                    free(output_filename);
+                    if (encoded_jpeg_img.data) {
+                        heap_caps_free(encoded_jpeg_img.data);
+                    }
+                    continue;
+                }
                 
-            //     char output_filepath[512];
-            //     int ret2 = snprintf(output_filepath, sizeof(output_filepath), "%s/%s", classified_path, output_filename);
-            //     if (ret2 >= sizeof(output_filepath)) {
-            //         ESP_LOGE("SD", "Output filepath too long for: %s", output_filename);
-            //         if (encoded_jpeg_img.data) {
-            //             heap_caps_free(encoded_jpeg_img.data);
-            //         }
-            //         continue;
-            //     }
+                char output_filepath[512];
+                int ret2 = snprintf(output_filepath, sizeof(output_filepath), "/sdcard/%s", output_filename);
+                if (ret2 >= sizeof(output_filepath)) {
+                    ESP_LOGE("SD", "Output filepath too long for: %s", output_filename);
+                    free(output_filename);
+                    if (encoded_jpeg_img.data) {
+                        heap_caps_free(encoded_jpeg_img.data);
+                    }
+                    continue;
+                }
                 
-            //     esp_err_t write_err = dl::image::write_jpeg(encoded_jpeg_img, output_filepath);
-            //     if (write_err == ESP_OK) {
-            //         ESP_LOGI("SD", "Classified image saved: %s", output_filename);
-            //     } else {
-            //         ESP_LOGE("SD", "Failed to save classified image: %s", output_filename);
-            //     }
+                esp_err_t write_err = dl::image::write_jpeg(encoded_jpeg_img, output_filepath);
+                if (write_err == ESP_OK) {
+                    ESP_LOGI("SD", "Classified image saved: %s", output_filename);
+                } else {
+                    ESP_LOGE("SD", "Failed to save classified image: %s", output_filepath);
+                }
                 
-            //     // Free JPEG data
-            //     if (encoded_jpeg_img.data) {
-            //         heap_caps_free(encoded_jpeg_img.data);
-            //     }
-            // } else {
-            //     ESP_LOGE("JPEG", "Failed to encode image: %s", entry->d_name);
-            // }
+                // Free output_filename after we're done using it
+                free(output_filename);
+                
+                // Free JPEG data
+                if (encoded_jpeg_img.data) {
+                    heap_caps_free(encoded_jpeg_img.data);
+                }
+            } else {
+                ESP_LOGE("JPEG", "Failed to encode image: %s", entry->d_name);
+            }
         }
         
         closedir(dir);
