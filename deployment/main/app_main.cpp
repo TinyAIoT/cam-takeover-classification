@@ -741,20 +741,14 @@ extern "C" void app_main(void) {
 #if SAVE_TO_SDCARD
 
     // check if there is a folder called "to classify" on the SD card
-    ESP_LOGI("???", "1");
     const char* to_classify_path = "/sdcard/to_classify";
-    ESP_LOGI("???", "2");
     const char* classified_path = "/sdcard/classified";
-    ESP_LOGI("???", "3");
     
     // Create classified directory if it doesn't exist
     createDir(classified_path);
-    ESP_LOGI("???", "4");
     
     DIR *dir = opendir(to_classify_path);
-    ESP_LOGI("???", "5");
     if (dir) {
-    ESP_LOGI("???", "6");
         ESP_LOGI("SD", "Found to_classify folder, processing images...");
         
         struct dirent *entry;
