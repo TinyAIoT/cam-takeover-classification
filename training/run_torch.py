@@ -28,7 +28,7 @@ if __name__ == '__main__':
     
     # Parse the command-line arguments
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument("--config", type=str, default="/home/paula/Documents/reedu/TinyAIoT/cam-takeover-detection/training/configs/squeezenet.yaml", help="Path to the config file.")
+    parser.add_argument("--config", type=str, default="training/configs/squeezenet.yaml", help="Path to the config file.")
     parser.add_argument("--working_dir", type=str, default="./", help="Path to local data directory.")
     args=parser.parse_args()
 

@@ -1,8 +1,8 @@
 # This file contains the configuration for the training process + optional fine-tuning
-batch_size: 96
-training_epochs: 2
-dataset_path: /home/paula/Documents/reedu/TinyAIoT/cam-takeover-detection/data/demo # plant-village, birds
-output_path: /home/paula/Documents/reedu/TinyAIoT/cam-takeover-detection/training/output
+batch_size: 32
+training_epochs: 30
+dataset_path: data/split_classified # plant-village, birds
+output_path: training/output
 img_height: 96
 img_num_channels: 3
 img_width: 96
