@@ -5,3 +5,5 @@ data/real_raw
 */__pycache__
 */.vscode
 */managed_components
+*/build
+*/split_classified
