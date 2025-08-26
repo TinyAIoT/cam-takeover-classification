@@ -2,19 +2,23 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1                    # Total number of tasks
 #SBATCH --gres=gpu:1                  # Request 4 GPUs
-#SBATCH --cpus-per-task=10            # Number of CPU cores
-#SBATCH --mem=60GB                    # Memory per node
+#SBATCH --cpus-per-task=16            # Number of CPU cores
+# try --mem=16GB                    # Memory per node
+#SBATCH --mem-per-cpu=2GB
+#SBATCH --partition=requeue-gpu
+# Use one of these options:
+#   private gpus:                 requeue-gpu
+#   all (non-private) zen3 gpus:      gpuv100,gpu2080,gpua100,gputitanrtx,gpu3090,gpuhgx
+#   express gpu:                      gpuexpress
 
-#SBATCH --partition=gpu2080,gpua100,gputitanrtx,gpu3090,gpuhgx
-# try: normal ,express, long
 
-#SBATCH --time=0-04:00:00
+#SBATCH --time=0-02:00:00
 
-#SBATCH --job-name=train_squeezy_
+#SBATCH --job-name=train_squeezy_org
 
 #SBATCH --mail-type=ALL
 
-#SBATCH --output /scratch/tmp/%u/cam-takeover-classification/tmp/training/train_squeezey_%j.log
+#SBATCH --output /scratch/tmp/%u/cam-takeover-classification/tmp/training/train_squeezy_org_%j.log
 
 #load modules 
 module purge
@@ -36,12 +40,14 @@ pip install --user torch==2.2.0+cu121 torchvision==0.17.0+cu121 --index-url http
 pip install --user tqdm
 pip install --user pycocotools
 pip install --user opencv-python
+# For debugging use: 
+# pip install torchprofile 
 # place of code in palma
 wd="$WORK"/cam-takeover-classification
 code="$HOME"/cam-takeover-classification
 
 # run code with flags
 # run sbatch with flag --config path/to/config.yaml
-python "$code"/training/run_torch.py --working_dir $wd "$@"
+python "$code"/training/run_transfer_learning_pipeline.py --working_dir $wd "$@"
 echo "end of Training for Job "$SLURM_JOB_ID" :"
 echo `date +%Y.%m.%d-%H:%M:%S`

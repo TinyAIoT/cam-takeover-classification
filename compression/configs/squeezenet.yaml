@@ -1,8 +1,10 @@
 # Config for MobileNetV2 model compression calibrated on CUB dataset
 batch_size: 32
-input_model_path: /home/paula/Documents/reedu/TinyAIoT/cam-takeover-detection/training/output/torch_squeezy/torch_squeezy.pth
-dataset_path: /home/paula/Documents/reedu/TinyAIoT/cam-takeover-detection/data/demo/
-output_path: /home/paula/Documents/reedu/TinyAIoT/cam-takeover-detection/compression/output/
+input_model_path: results/torch_squeezy/torch_squeezy/torch_squeezy_fine_tuning.pth
+dataset_path: data/split_classified/
+output_path: results/torch_squeezy/compression/
+img_height: 96
+img_width: 96
 model_name: torch_squeezy
 quant_config: LayerwiseEqualization_quantization # [None, "LayerwiseEqualization_quantization", "MixedPrecision_quantization"]
 

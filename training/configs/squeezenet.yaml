@@ -1,17 +1,28 @@
-# This file contains the configuration for the training process + optional fine-tuning
-batch_size: 32
-training_epochs: 30
-dataset_path: data/split_classified # plant-village, birds
-output_path: training/output
 img_height: 96
-img_num_channels: 3
 img_width: 96
-model_name: torch_squeezy
-model_type: squeezenet # shufflenet, mobilenet, efficientnet, densenet, squeezenet
+batch_size: 64
 patience: 5
-num_workers: 4
-# The following parameters are used for fine-tuning
-fine_tune: False
-fine_tune_epochs: 10
+dataset_path: data/split_classified
+model_name: torch_squeezy_org
+model_type: squeezenet
+num_workers: 16
+output_path: results/torch_squeezy_org
+
+# Transfer Learning configuration
+transfer_learning_epochs: 40  # Epochs for transfer learning phase
+transfer_learning_rate: 0.001  # Learning rate for transfer learning
+transfer_weight_decay: 0.0001  # Weight decay for transfer learning
+
+# Fine-tuning configuration
+fine_tune: True
+fine_tune_epochs: 20
 fine_tuning_learning_rate: 0.00001
-model_task: classify
+fine_tuning_weight_decay: 0.0001
+num_unfreezed_feature_layers: 15  # Unfreeze last 50 feature layers
+
+
+# Additional parameters
+# requires_grad: False # Whether to require gradients for the model parameters (make them trainable) | Defaults to False
+# check_corrupted_images: False # Whether to check for corrupted images in the dataset | Defaults to False
+# pin_memory - True # Whether to pin memory during data loading | Defaults to True
+# profile - False  # Whether to profile the training process (causing training to be interrupted after few steps) | Defaults to False | FOR DEBUGGING ONLY
