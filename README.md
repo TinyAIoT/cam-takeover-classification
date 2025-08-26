@@ -10,3 +10,4 @@ Detecting dangerous takover maneuvers live with a microcontroller on a bicycle. 
 ### ideas and future work
 - data augmentation
 - NAS for "custom model" in ideaB
+- calculate precision and recall per takeover GROUP (if one frame of a group is takeover, then the whole group is takeover)
