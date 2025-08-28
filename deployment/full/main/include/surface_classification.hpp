@@ -9,6 +9,6 @@
 #include "SurfacePostProcessor.hpp"
 #include "surface_category_name.hpp"
 
-bool convert_surface_image(dl::image::img_t &input_img, dl::image::img_t &output_img);
+bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &output_img);
 std::vector<dl::cls::result_t> run_surface_inference(const dl::image::img_t &img);
-bool process_surface_image(dl::image::img_t &input_img, float &score, const char** category);
+bool process_surface_image(const dl::image::img_t* input_img, float &score, const char** category);

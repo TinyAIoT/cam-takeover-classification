@@ -2,10 +2,10 @@
 
 extern const uint8_t espdl_model[] asm("_binary_surface_espdl_start");
 
-bool convert_surface_image(dl::image::img_t &input_img, dl::image::img_t &output_img) {
+bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &output_img) {
     // original height and width
-    int orig_height = input_img.height;
-    int orig_width = input_img.width;
+    int orig_height = input_img->height;
+    int orig_width = input_img->width;
 
     // crop to square
     int x_min = orig_width/6;
@@ -17,13 +17,21 @@ bool convert_surface_image(dl::image::img_t &input_img, dl::image::img_t &output
     output_img.height = y_max-y_min;
     output_img.width = x_max-x_min;
     output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
+    if (output_img.data) {
+        free(output_img.data);
+        output_img.data = nullptr;
+    }
+
     output_img.data = malloc(output_img.height * output_img.width * 3); // RGB888: 3 bytes per pixel
 
     if (!output_img.data) {
-        ESP_LOGE("MEM", "Memory allocation failed");
+        ESP_LOGE("SURFACE", "Memory allocation failed");
         free(output_img.data);
         return false;
     }
+
+    // Convert using ESP-DL
+    dl::image::convert_img(*input_img, output_img, 0, nullptr, crop_area);
 
     return true;
 }
@@ -35,21 +43,19 @@ const dl::cls::result_t run_surface_inference(dl::image::img_t &input_img) {
     dl::Model *model = nullptr;
     dl::image::ImagePreprocessor *m_image_preprocessor = nullptr;
     
+    // TODO: do I really need to reinitialize the model everytime? It takes like a hundred millis each time
     model = new dl::Model((const char *)espdl_model, dir);
     if (!model) {
-        ESP_LOGE("MODEL", "Failed to create model");
+        ESP_LOGE("SURFACE", "Failed to create model");
         return {};
     }
-    
-    // Add a small delay to ensure model is properly initialized
-    vTaskDelay(pdMS_TO_TICKS(100));
     
     uint32_t t0, t1;
     float delta;
     t0 = esp_timer_get_time();
     m_image_preprocessor = new dl::image::ImagePreprocessor(model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
     if (!m_image_preprocessor) {
-        ESP_LOGE("PREPROCESSOR", "Failed to create image preprocessor");
+        ESP_LOGE("SURFACE", "Failed to create image preprocessor");
         delete model;
         return {};
     }
@@ -69,7 +75,7 @@ const dl::cls::result_t run_surface_inference(dl::image::img_t &input_img) {
     bool found_result = false;
 
     for (auto &res : results) {
-        ESP_LOGI("CLS", "category: %s, score: %f\n", res.cat_name, res.score);
+        ESP_LOGI("SURFACE", "category: %s, score: %f\n", res.cat_name, res.score);
         if (!found_result || res.score > best_result.score)
         {
             best_result = res;  // Copy the result
@@ -90,16 +96,16 @@ const dl::cls::result_t run_surface_inference(dl::image::img_t &input_img) {
     return best_result;
 }
 
-bool process_surface_image(dl::image::img_t &input_img, float &score, const char** category) {
+bool process_surface_image(const dl::image::img_t* input_img, float &score, const char** category) {
     dl::image::img_t converted_img;
     if (!convert_surface_image(input_img, converted_img)) {
-        ESP_LOGE("img", "Could not convert image");
+        ESP_LOGE("SURFACE", "Could not convert image");
         return false;
     }
 
     const auto best = run_surface_inference(converted_img);
     if (best.cat_name) {
-        ESP_LOGI("INF", "Best: %s (score: %f)", best.cat_name, best.score);
+        ESP_LOGI("SURFACE", "Best: %s (score: %f)", best.cat_name, best.score);
     }
     
     score = best.score;

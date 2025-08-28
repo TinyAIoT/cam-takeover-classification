@@ -95,9 +95,15 @@ static bool capture_image(dl::image::img_t &output_img) {
     output_img.height = pic->height;
     output_img.width = pic->width;
     output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB565;
-    
-    // Allocate memory for the image data
+
+    // Free previously allocated memory to avoid leaks and buffer overflows
+
+    if (output_img.data) {
+        free(output_img.data);
+        output_img.data = nullptr;
+    }
     output_img.data = malloc(pic->len);
+
     if (!output_img.data) {
         ESP_LOGE("CAM", "Failed to allocate memory for image data");
         esp_camera_fb_return(pic);
@@ -111,39 +117,134 @@ static bool capture_image(dl::image::img_t &output_img) {
     return true;
 }
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+
+// ---- Shared pipeline state ----
+static dl::image::img_t g_buf[2];            // allocate these properly (global/static/heap)
+static volatile int g_read_idx = 0;          // which buffer consumers should read
+static int g_write_idx = 1;                  // which buffer producer should write next
+
+// Semaphores to start each classifier on a new frame
+static SemaphoreHandle_t g_sem_start_surface;
+static SemaphoreHandle_t g_sem_start_takeover;
+
+// Semaphores to signal producer that each classifier finished
+static SemaphoreHandle_t g_sem_done_surface;
+static SemaphoreHandle_t g_sem_done_takeover;
+
+// Optional: a mutex if your img_t needs guarded access during capture
+// (generally not needed with strict read/write separation via indices)
+static SemaphoreHandle_t g_buf_mutex; // (optional)
+
+// ---- Capture -> fill buffer[write_idx] ----
+static bool capture_into_buffer(int idx) {
+    // capture_image should write into g_buf[idx]
+    return capture_image(g_buf[idx]);
+}
+
+static void camera_capture_task(void *pvParameters) {
+    uint32_t last_capture_time = 0;
+    for (;;) {
+        ESP_LOGI("CAM", "Free heap at start of loop: %lu bytes", esp_get_free_heap_size());
+
+        // Wait until both consumers are done with the previous frame
+        xSemaphoreTake(g_sem_done_surface, portMAX_DELAY);
+        xSemaphoreTake(g_sem_done_takeover, portMAX_DELAY);
+
+        // Capture into write buffer
+        if (!capture_into_buffer(g_write_idx)) {
+            ESP_LOGE("CAM", "capture failed");
+            // If capture fails, still notify consumers? Usually no. Try again.
+            continue;
+        }
+
+        // --- Framerate calculation ---
+        uint32_t now = xTaskGetTickCount();
+        if (last_capture_time != 0) {
+            float seconds = (now - last_capture_time) * portTICK_PERIOD_MS / 1000.0f;
+            if (seconds > 0.0f) {
+                float fps = 1.0f / seconds;
+                ESP_LOGI("CAM", "Capture framerate: %.2f FPS", fps);
+            }
+        }
+        last_capture_time = now;
+        // --- End framerate calculation ---
+
+        // Publish the new frame by flipping read_idx atomically (single int write is atomic on ESP32)
+        g_read_idx = g_write_idx;
+
+        // Flip write index for the next capture
+        g_write_idx ^= 1;
+
+        // Kick both consumers to start processing this frame
+        xSemaphoreGive(g_sem_start_surface);
+        xSemaphoreGive(g_sem_start_takeover);
+    }
+}
+
+static void surface_classification_task(void *pvParameters) {
+    for (;;) {
+        // Wait for a new frame
+        xSemaphoreTake(g_sem_start_surface, portMAX_DELAY);
+
+        // Read current frame index AFTER take: memory order is fine through semaphore
+        int idx = g_read_idx;
+
+        float score = 0.0f;
+        const char* category = NULL;
+        if (process_surface_image(&g_buf[idx], score, &category)) {
+            ESP_LOGI("SURFACE", "Score: %.2f, Category: %s", score, category ? category : "NULL");
+        } else {
+            ESP_LOGW("SURFACE", "processing failed");
+        }
+
+        // Signal done
+        xSemaphoreGive(g_sem_done_surface);
+    }
+}
+
+static void takeover_classification_task(void *pvParameters) {
+    for (;;) {
+        // Wait for a new frame
+        xSemaphoreTake(g_sem_start_takeover, portMAX_DELAY);
+
+        int idx = g_read_idx;
+
+        float score = 0.0f;
+        const char* category = NULL;
+        if (process_takeover_image(&g_buf[idx], score, &category)) {
+            ESP_LOGI("TAKEOVER", "Score: %.2f, Category: %s", score, category ? category : "NULL");
+        } else {
+            ESP_LOGW("TAKEOVER", "processing failed");
+        }
+
+        // Signal done
+        xSemaphoreGive(g_sem_done_takeover);
+    }
+}
+
 extern "C" void app_main(void) {
-    if (ESP_OK != init_camera())
-    {
-        ESP_LOGE("SD", "Camera initialization failed. Look into init_camera()");
+    if (ESP_OK != init_camera()) {
+        ESP_LOGE("CAM", "Camera init failed");
         return;
     }
 
-    while (true)
-    {
-        ESP_LOGI("MEM", "Free heap at start of loop: %lu bytes", esp_get_free_heap_size());
-        dl::image::img_t img;
-        if (!capture_image(img)) {
-            ESP_LOGE("img", "Could not take picture");
-            return;
-        }
+    // Init semaphores
+    g_sem_start_surface  = xSemaphoreCreateBinary();
+    g_sem_start_takeover = xSemaphoreCreateBinary();
+    g_sem_done_surface   = xSemaphoreCreateBinary();
+    g_sem_done_takeover  = xSemaphoreCreateBinary();
+    // Optional mutex
+    // g_buf_mutex = xSemaphoreCreateMutex();
 
-        float takeover_score = 0.0f;
-        const char* takeover_category = nullptr;
-        if (process_takeover_image(img, takeover_score, &takeover_category)) {
-            ESP_LOGI("TAKEOVER", "Takeover Score: %.2f, Category: %s", takeover_score, takeover_category);
-        }
+    // On the very first iteration, the producer will block waiting for both "done".
+    // Give them once so the first capture can happen immediately:
+    xSemaphoreGive(g_sem_done_surface);
+    xSemaphoreGive(g_sem_done_takeover);
 
-        float surface_score = 0.0f;
-        const char* surface_category = nullptr;
-        if (process_surface_image(img, surface_score, &surface_category)) {
-            ESP_LOGI("SURFACE", "Surface Score: %.2f, Category: %s", surface_score, surface_category);
-        }   
-
-        // Free the original camera image data
-        if (img.data) {
-            free(img.data);
-            img.data = nullptr;
-        }
-        
-    }
+    xTaskCreatePinnedToCore(camera_capture_task,       "camera",   8192*2, NULL, 12, NULL, 0);
+    xTaskCreatePinnedToCore(surface_classification_task,"surface",  8192*2, NULL, 17, NULL, 0);
+    xTaskCreatePinnedToCore(takeover_classification_task,"takeover",8192*2, NULL, 20, NULL, 1);
 }

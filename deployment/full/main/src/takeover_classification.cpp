@@ -35,9 +35,14 @@ struct ImageRingBuffer {
         
         // Allocate new memory and copy image data
         size_t data_size = img.height * img.width * 3; // RGB888: 3 bytes per pixel
+        // TODO: fix memory leak
+        // if (images[write_index].data) {
+        //     free(images[write_index].data);
+        //     images[write_index].data = nullptr;
+        // }
         images[write_index].data = malloc(data_size);
         if (!images[write_index].data) {
-            ESP_LOGE("RING_BUFFER", "Memory allocation failed for ring buffer");
+            ESP_LOGE("TAKEOVER", "Memory allocation failed for ring buffer");
             return false;
         }
         
@@ -87,6 +92,11 @@ struct ImageRingBuffer {
         output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
         
         size_t total_size = composed_width * composed_height * 3; // RGB888: 3 bytes per pixel
+        // TODO: fix memory leak
+        // if (output_img.data) {
+        //     free(output_img.data);
+        //     output_img.data = nullptr;
+        // }
         output_img.data = malloc(total_size);
         if (!output_img.data) {
             ESP_LOGE("RING_BUFFER", "Memory allocation failed for composed image");
@@ -142,10 +152,10 @@ ImageRingBuffer ring_buffer;
 extern const uint8_t espdl_model[] asm("_binary_takeover_espdl_start");
 
 
-bool convert_takeover_image(dl::image::img_t &input_img, dl::image::img_t &output_img) {
+bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t &output_img) {
     // original height and width
-    int orig_height = input_img.height;
-    int orig_width = input_img.width;
+    int orig_height = input_img->height;
+    int orig_width = input_img->width;
 
     // crop to square
     int x_min = orig_width-orig_height;
@@ -158,16 +168,21 @@ bool convert_takeover_image(dl::image::img_t &input_img, dl::image::img_t &outpu
     cropped_img.height = y_max-y_min;
     cropped_img.width = x_max-x_min;
     cropped_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
+    // TODO: fix memory leak
+    // if (cropped_img.data) {
+    //     free(cropped_img.data);
+    //     cropped_img.data = nullptr;
+    // }
     cropped_img.data = malloc(cropped_img.height * cropped_img.width * 3); // RGB888: 3 bytes per pixel
 
     if (!cropped_img.data) {
-        ESP_LOGE("MEM", "Memory allocation failed");
+        ESP_LOGE("TAKEOVER", "Memory allocation failed");
         free(cropped_img.data);
         return false;
     }
 
     // Convert using ESP-DL
-    dl::image::convert_img(input_img, cropped_img, 0, nullptr, crop_area);
+    dl::image::convert_img(*input_img, cropped_img, 0, nullptr, crop_area);
 
     // rescale to 24x24
     int target_w = 24;
@@ -176,6 +191,11 @@ bool convert_takeover_image(dl::image::img_t &input_img, dl::image::img_t &outpu
     output_img.height = target_h;
     output_img.width = target_w;
     output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
+    // TODO: fix memory leak
+    // if (output_img.data) {
+    //     free(output_img.data);
+    //     output_img.data = nullptr;
+    // }
     output_img.data = malloc(target_h * target_w * 3); // RGB888: 3 bytes per pixel
 
     // Convert using ESP-DL
@@ -193,21 +213,19 @@ const dl::cls::result_t run_takeover_inference(dl::image::img_t &input_img) {
     dl::Model *model = nullptr;
     dl::image::ImagePreprocessor *m_image_preprocessor = nullptr;
     
+    // TODO: do I really need to reinitialize the model everytime? It takes like a hundred millis each time
     model = new dl::Model((const char *)espdl_model, dir);
     if (!model) {
-        ESP_LOGE("MODEL", "Failed to create model");
+        ESP_LOGE("TAKEOVER", "Failed to create model");
         return {};
     }
-    
-    // Add a small delay to ensure model is properly initialized
-    vTaskDelay(pdMS_TO_TICKS(100));
     
     uint32_t t0, t1;
     float delta;
     t0 = esp_timer_get_time();
     m_image_preprocessor = new dl::image::ImagePreprocessor(model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
     if (!m_image_preprocessor) {
-        ESP_LOGE("PREPROCESSOR", "Failed to create image preprocessor");
+        ESP_LOGE("TAKEOVER", "Failed to create image preprocessor");
         delete model;
         return {};
     }
@@ -227,7 +245,7 @@ const dl::cls::result_t run_takeover_inference(dl::image::img_t &input_img) {
     bool found_result = false;
 
     for (auto &res : results) {
-        ESP_LOGI("CLS", "category: %s, score: %f\n", res.cat_name, res.score);
+        ESP_LOGI("TAKEOVER", "category: %s, score: %f\n", res.cat_name, res.score);
         if (!found_result || res.score > best_result.score)
         {
             best_result = res;  // Copy the result
@@ -248,16 +266,16 @@ const dl::cls::result_t run_takeover_inference(dl::image::img_t &input_img) {
     return best_result;
 }
 
-bool process_takeover_image(dl::image::img_t &input_img, float &score, const char** category) {
+bool process_takeover_image(const dl::image::img_t* input_img, float &score, const char** category) {
     dl::image::img_t converted_img;
     if (!convert_takeover_image(input_img, converted_img)) {
-        ESP_LOGE("img", "Could not convert image");
+        ESP_LOGE("TAKEOVER", "Could not convert image");
         return false;
     }
 
     // Add converted image to ring buffer
     if (!ring_buffer.add_image(converted_img)) {
-        ESP_LOGE("img", "Could not add image to ring buffer");
+        ESP_LOGE("TAKEOVER", "Could not add image to ring buffer");
         free(converted_img.data);
         return false;
     }
@@ -266,24 +284,24 @@ bool process_takeover_image(dl::image::img_t &input_img, float &score, const cha
     free(converted_img.data);
     converted_img.data = nullptr;
     
-    ESP_LOGI("RING_BUFFER", "Added image to ring buffer. Count: %d/%d", 
+    ESP_LOGI("TAKEOVER", "Added image to ring buffer. Count: %d/%d", 
                 ring_buffer.get_count(), RING_BUFFER_SIZE);
 
     // Check if the ring buffer is full
     if (!ring_buffer.is_full()) {
-        ESP_LOGI("RING_BUFFER", "Ring buffer has not been filled yet.");
+        ESP_LOGI("TAKEOVER", "Ring buffer has not been filled yet.");
         return false; // Not enough images yet
     } else {
-        ESP_LOGI("RING_BUFFER", "Ring buffer is full. Composing 4x4 image.");
+        ESP_LOGI("TAKEOVER", "Ring buffer is full. Composing 4x4 image.");
         dl::image::img_t composed_img;
         if (!ring_buffer.compose_4x4_image(composed_img)) {
-            ESP_LOGE("RING_BUFFER", "Failed to compose 4x4 image");
+            ESP_LOGE("TAKEOVER", "Failed to compose 4x4 image");
             return false;
         }
 
         const auto best = run_takeover_inference(composed_img);
         if (best.cat_name) {
-            ESP_LOGI("INF", "Best: %s (score: %f)", best.cat_name, best.score);
+            ESP_LOGI("TAKEOVER", "Best: %s (score: %f)", best.cat_name, best.score);
         }
         
         score = best.score;
