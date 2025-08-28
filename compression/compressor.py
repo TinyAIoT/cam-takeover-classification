@@ -19,8 +19,8 @@ import json
 import torch
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 from utilities.calib_util import evaluate_ppq_module_with_pv, evaluate_torch_module_with_imagenet
-from ppq import QuantizationSettingFactory, QuantizationSetting
-from ppq.api import get_target_platform, espdl_quantize_torch
+from esp_ppq import QuantizationSettingFactory, QuantizationSetting
+from esp_ppq.api import get_target_platform, espdl_quantize_torch
 from torch.utils.data import DataLoader
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
@@ -28,6 +28,21 @@ from torch.utils.data.dataset import Subset
 import argparse
 import torch.nn as nn
 import pandas as pd
+
+def get_default_device():
+    """Pick GPU if available, else CPU
+    Returns:
+        torch.device: Device to use for training (CPU, CUDA, or MPS)
+    """
+    if torch.cuda.is_available():
+        print(f"Using CUDA for training.")
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        print(f"Using MPS for training.")
+        return torch.device("mps")
+    else:
+        print(f"Using CPU for training.")
+        return torch.device("cpu")
 
 # -------------------------------------------
 # Helper Functions
@@ -105,7 +120,7 @@ def collate_fn2(batch: torch.Tensor) -> torch.Tensor:
 if __name__ == "__main__":
     
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("--config", type=str, default="/home/paula/Documents/reedu/TinyAIoT/cam-takeover-detection/compression/configs/squeezenet.yaml", help="Path to the config file.")
+    argparser.add_argument("--config", type=str, default="compression/configs/squeezenet.yaml", help="Path to the config file.")
     argparser.add_argument("--working_dir", type=str, default="./", help="Path to local data directory.")
     argparser.add_argument("--opt_level", type=int, default=2, help="Optimization level for equalization.")
     argparser.add_argument("--iterations", type=int, default=10, help="Number of iterations for equalization.")
@@ -260,7 +275,7 @@ if __name__ == "__main__":
     test = evaluate_torch_module_with_imagenet(
         model=model,
         batchsize= BATCH_SIZE,
-        device=DEVICE,
+        device=get_default_device(),
         imagenet_validation_loader=test_dataloader,
         verbose=True,
         img_height=IMAGE_HEIGHT,
@@ -283,7 +298,7 @@ if __name__ == "__main__":
         num_of_bits=NUM_OF_BITS,
         collate_fn=collate_fn2,
         setting=quant_setting,
-        device=DEVICE,
+        device="cuda:0",
         error_report=True,
         skip_export=False,
         export_test_values=False,
@@ -298,7 +313,7 @@ if __name__ == "__main__":
         model=quant_ppq_graph,
         imagenet_validation_loader=test_dataloader,
         batchsize=BATCH_SIZE,
-        device=DEVICE,
+        device="cuda:0",
         verbose=1,
         print_confusion_matrix=False,
         img_height=IMAGE_HEIGHT,
