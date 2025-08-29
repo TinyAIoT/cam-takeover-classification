@@ -33,7 +33,7 @@
 #define portTICK_RATE_MS portTICK_PERIOD_MS
 #endif
 
-#include "camera_pins.h"
+#include "include/camera_pins.h"
 
 // Camera Module pin mapping
 static camera_config_t camera_config = {

@@ -8,6 +8,7 @@
 
 #include "TakeoverPostProcessor.hpp"
 #include "takeover_category_name.hpp"
+#include "image_ring_buffer.hpp"
 
 bool initialize_takeover_model();
 bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t &output_img);

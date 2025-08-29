@@ -8,13 +8,14 @@ set(src_dirs        ./
                     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 set(include_dirs    ./
-                    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+                    ${CMAKE_CURRENT_SOURCE_DIR}/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/include/surface
+                    ${CMAKE_CURRENT_SOURCE_DIR}/include/takeover)
 
 list(APPEND requires    esp32_s3_eye_noglib
                          esp_lcd
                          esp-dl)
 
-file(GLOB embed_imgs "${CMAKE_CURRENT_SOURCE_DIR}/data/*")
 file(GLOB embed_models "${CMAKE_CURRENT_SOURCE_DIR}/models/*")
 
 set(embed_files ${embed_imgs} ${embed_models})
