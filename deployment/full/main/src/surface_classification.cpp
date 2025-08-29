@@ -1,6 +1,6 @@
 #include "surface_classification.hpp"
 
-extern const uint8_t espdl_model[] asm("_binary_surface_espdl_start");
+extern const uint8_t espdl_surface_model[] asm("_binary_surface_espdl_start");
 dl::Model *surface_model = nullptr;
 dl::image::ImagePreprocessor *m_surface_preprocessor = nullptr;
 
@@ -9,7 +9,7 @@ bool initialize_surface_model() {
     char dir[64];
     snprintf(dir, sizeof(dir), "%s/espdl_models", CONFIG_BSP_SD_MOUNT_POINT);
     
-    surface_model = new dl::Model((const char *)espdl_model, dir);
+    surface_model = new dl::Model((const char *)espdl_surface_model, dir);
     if (!surface_model) {
         ESP_LOGE("SURFACE", "Failed to create model");
         return false;

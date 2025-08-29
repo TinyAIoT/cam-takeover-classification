@@ -126,9 +126,8 @@ static dl::image::img_t g_buf[2];            // allocate these properly (global/
 static volatile int g_read_idx = 0;          // which buffer consumers should read
 static int g_write_idx = 1;                  // which buffer producer should write next
 
-// Semaphores to start each classifier on a new frame
-static SemaphoreHandle_t g_sem_start_surface;
-static SemaphoreHandle_t g_sem_start_takeover;
+// event to trigger surface and takeover classification
+static EventGroupHandle_t g_frame_evt;
 
 // Semaphores to signal producer that each classifier finished
 static SemaphoreHandle_t g_sem_done_surface;
@@ -177,9 +176,7 @@ static void camera_capture_task(void *pvParameters) {
         // Flip write index for the next capture
         g_write_idx ^= 1;
 
-        // Kick both consumers to start processing this frame
-        xSemaphoreGive(g_sem_start_surface);
-        xSemaphoreGive(g_sem_start_takeover);
+        xEventGroupSetBits(g_frame_evt, BIT0 | BIT1);  // release both Surface and takeover
     }
 }
 
@@ -190,9 +187,9 @@ static void surface_classification_task(void *pvParameters) {
     }
     for (;;) {
         // Wait for a new frame
-        xSemaphoreTake(g_sem_start_surface, portMAX_DELAY);
-        ESP_LOGI("SURFACE", "start processing");
-
+        xEventGroupWaitBits(g_frame_evt, BIT0, pdTRUE, pdTRUE, portMAX_DELAY); // SURFACE waits BIT0 (auto-clear with pdTRUE)
+        
+        ESP_LOGI("SURFACE", "start (core=%d, tick=%u)", xPortGetCoreID(), xTaskGetTickCount());
 
         // Read current frame index AFTER take: memory order is fine through semaphore
         int idx = g_read_idx;
@@ -205,7 +202,6 @@ static void surface_classification_task(void *pvParameters) {
             ESP_LOGW("SURFACE", "processing failed");
         }
 
-        ESP_LOGI("SURFACE", "end processing");
         xSemaphoreGive(g_sem_done_surface);
     }
 }
@@ -217,8 +213,9 @@ static void takeover_classification_task(void *pvParameters) {
     }
     for (;;) {
         // Wait for a new frame
-        xSemaphoreTake(g_sem_start_takeover, portMAX_DELAY);
-        ESP_LOGI("TAKEOVER", "start processing");
+        xEventGroupWaitBits(g_frame_evt, BIT1, pdTRUE, pdTRUE, portMAX_DELAY); // TAKEOVER waits BIT1
+
+        ESP_LOGI("TAKEOVER", "start (core=%d, tick=%u)", xPortGetCoreID(), xTaskGetTickCount());
 
         int idx = g_read_idx;
 
@@ -230,7 +227,6 @@ static void takeover_classification_task(void *pvParameters) {
             ESP_LOGW("TAKEOVER", "processing failed");
         }
 
-        ESP_LOGI("TAKEOVER", "end processing");
         xSemaphoreGive(g_sem_done_takeover);
     }
 }
@@ -242,12 +238,10 @@ extern "C" void app_main(void) {
     }
 
     // Init semaphores
-    g_sem_start_surface  = xSemaphoreCreateBinary();
-    g_sem_start_takeover = xSemaphoreCreateBinary();
+    g_frame_evt = xEventGroupCreate();
+    configASSERT(g_frame_evt != NULL);
     g_sem_done_surface   = xSemaphoreCreateBinary();
     g_sem_done_takeover  = xSemaphoreCreateBinary();
-    // Optional mutex
-    // g_buf_mutex = xSemaphoreCreateMutex();
 
     // On the very first iteration, the producer will block waiting for both "done".
     // Give them once so the first capture can happen immediately:

@@ -149,7 +149,7 @@ struct ImageRingBuffer {
 };
 
 ImageRingBuffer ring_buffer;
-extern const uint8_t espdl_model[] asm("_binary_takeover_espdl_start");
+extern const uint8_t espdl_takeover_model[] asm("_binary_takeover_espdl_start");
 dl::Model *takeover_model = nullptr;
 dl::image::ImagePreprocessor *m_takeover_preprocessor = nullptr;
 
@@ -158,7 +158,7 @@ bool initialize_takeover_model() {
     char dir[64];
     snprintf(dir, sizeof(dir), "%s/espdl_models", CONFIG_BSP_SD_MOUNT_POINT);
     
-    takeover_model = new dl::Model((const char *)espdl_model, dir);
+    takeover_model = new dl::Model((const char *)espdl_takeover_model, dir);
     if (!takeover_model) {
         ESP_LOGE("TAKEOVER", "Failed to create model");
         return false;
