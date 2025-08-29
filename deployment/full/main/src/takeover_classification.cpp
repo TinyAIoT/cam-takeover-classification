@@ -236,6 +236,7 @@ const dl::cls::result_t run_takeover_inference(dl::image::img_t &input_img) {
     
     m_takeover_preprocessor->preprocess(input_img);
 
+    // TODO: try serializing model run with mutex
     takeover_model->run();
     const int check = 5;
     TakeoverPostProcessor m_postprocessor(takeover_model, check, std::numeric_limits<float>::lowest(), true);

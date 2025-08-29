@@ -67,6 +67,7 @@ const dl::cls::result_t run_surface_inference(dl::image::img_t &input_img) {
     
     m_surface_preprocessor->preprocess(input_img);
 
+    // TODO: try serializing model run with mutex
     surface_model->run();
     const int check = 5;
     SurfacePostProcessor m_postprocessor(surface_model, check, std::numeric_limits<float>::lowest(), true);
