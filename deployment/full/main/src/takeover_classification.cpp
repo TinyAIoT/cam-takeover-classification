@@ -1,4 +1,5 @@
 #include "takeover_classification.hpp"
+#include "BLEModule.h"
 
 ImageRingBuffer ring_buffer;
 extern const uint8_t espdl_takeover_model[] asm("_binary_takeover_espdl_start");
@@ -77,7 +78,7 @@ bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t 
     return true;
 }
 
-const dl::cls::result_t run_takeover_inference(dl::image::img_t &input_img) {    
+const std::vector<dl::cls::result_t> run_takeover_inference(dl::image::img_t &input_img) {    
     uint32_t t0, t1;
     float delta;
     t0 = esp_timer_get_time();
@@ -94,22 +95,14 @@ const dl::cls::result_t run_takeover_inference(dl::image::img_t &input_img) {
     delta = t1 - t0;
     printf("Inference in %8.0f us.\n", delta);
 
-    dl::cls::result_t best_result = {};
-    bool found_result = false;
-
     for (auto &res : results) {
         ESP_LOGI("TAKEOVER", "category: %s, score: %f\n", res.cat_name, res.score);
-        if (!found_result || res.score > best_result.score)
-        {
-            best_result = res;  // Copy the result
-            found_result = true;
-        }
     }
 
-    return best_result;
+    return results;
 }
 
-bool process_takeover_image(const dl::image::img_t* input_img, float &score, const char** category) {
+bool process_takeover_image(const dl::image::img_t* input_img) {
     dl::image::img_t converted_img;
     if (!convert_takeover_image(input_img, converted_img)) {
         ESP_LOGE("TAKEOVER", "Could not convert image");
@@ -142,13 +135,14 @@ bool process_takeover_image(const dl::image::img_t* input_img, float &score, con
             return false;
         }
 
-        const auto best = run_takeover_inference(composed_img);
-        if (best.cat_name) {
-            ESP_LOGI("TAKEOVER", "Best: %s (score: %f)", best.cat_name, best.score);
-        }
+        const auto results = run_takeover_inference(composed_img);
         
-        score = best.score;
-        *category = best.cat_name;
+        uint8_t scores[2] = {
+            static_cast<uint8_t>(results[0].score * 100),
+            static_cast<uint8_t>(results[1].score * 100)
+        };
+
+        notify_takeover_classification(scores);
     }
 
     return true;

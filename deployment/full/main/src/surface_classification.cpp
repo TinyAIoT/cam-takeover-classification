@@ -1,4 +1,5 @@
 #include "surface_classification.hpp"
+#include "BLEModule.h"
 
 extern const uint8_t espdl_surface_model[] asm("_binary_surface_espdl_start");
 dl::Model *surface_model = nullptr;
@@ -56,7 +57,7 @@ bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &
     return true;
 }
 
-const dl::cls::result_t run_surface_inference(dl::image::img_t &input_img) {
+const std::vector<dl::cls::result_t> run_surface_inference(dl::image::img_t &input_img) {
     uint32_t t0, t1;
     float delta;
     t0 = esp_timer_get_time();
@@ -73,35 +74,30 @@ const dl::cls::result_t run_surface_inference(dl::image::img_t &input_img) {
     delta = t1 - t0;
     printf("Inference in %8.0f us.\n", delta);
 
-    dl::cls::result_t best_result = {};
-    bool found_result = false;
-
     for (auto &res : results) {
         ESP_LOGI("SURFACE", "category: %s, score: %f\n", res.cat_name, res.score);
-        if (!found_result || res.score > best_result.score)
-        {
-            best_result = res;  // Copy the result
-            found_result = true;
-        }
     }
 
-    return best_result;
+    return results;
 }
 
-bool process_surface_image(const dl::image::img_t* input_img, float &score, const char** category) {
+bool process_surface_image(const dl::image::img_t* input_img) {
     dl::image::img_t converted_img;
     if (!convert_surface_image(input_img, converted_img)) {
         ESP_LOGE("SURFACE", "Could not convert image");
         return false;
     }
 
-    const auto best = run_surface_inference(converted_img);
-    if (best.cat_name) {
-        ESP_LOGI("SURFACE", "Best: %s (score: %f)", best.cat_name, best.score);
-    }
-    
-    score = best.score;
-    *category = best.cat_name;
+    const auto results = run_surface_inference(converted_img);
+
+    uint8_t scores[4] = {
+        static_cast<uint8_t>(results[0].score * 100),
+        static_cast<uint8_t>(results[1].score * 100),
+        static_cast<uint8_t>(results[2].score * 100),
+        static_cast<uint8_t>(results[3].score * 100)
+    };
+
+    notify_surface_classification(scores);
     
     // Free the original converted_img.data since it's been copied to ring buffer
     free(converted_img.data);

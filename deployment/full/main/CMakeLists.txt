@@ -14,7 +14,8 @@ set(include_dirs    ./
 
 list(APPEND requires    esp32_s3_eye_noglib
                          esp_lcd
-                         esp-dl)
+                         esp-dl
+                         bt)
 
 file(GLOB embed_models "${CMAKE_CURRENT_SOURCE_DIR}/models/*")
 

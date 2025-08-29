@@ -9,6 +9,10 @@
 #include <nvs_flash.h>
 #include <string.h>
 #include <sys/param.h>
+#include "nimble/nimble_port.h"
+#include "nimble/nimble_port_freertos.h"
+#include "services/gap/ble_svc_gap.h"
+#include "host/ble_hs.h"
 
 #include "esp_jpeg_enc.h"
 
@@ -25,6 +29,8 @@
 #include <sys/stat.h>
 #include <cstring>
 
+#include "include/BLEModule.h"
+#include "include/camera_pins.h"
 #include "include/takeover_classification.hpp"
 #include "include/surface_classification.hpp"
 
@@ -33,7 +39,7 @@
 #define portTICK_RATE_MS portTICK_PERIOD_MS
 #endif
 
-#include "include/camera_pins.h"
+static const char *device_name = "senseBox:bike[XXX]";
 
 // Camera Module pin mapping
 static camera_config_t camera_config = {
@@ -194,11 +200,7 @@ static void surface_classification_task(void *pvParameters) {
         // Read current frame index AFTER take: memory order is fine through semaphore
         int idx = g_read_idx;
 
-        float score = 0.0f;
-        const char* category = NULL;
-        if (process_surface_image(&g_buf[idx], score, &category)) {
-            ESP_LOGI("SURFACE", "Score: %.2f, Category: %s", score, category ? category : "NULL");
-        } else {
+        if (!process_surface_image(&g_buf[idx])) {
             ESP_LOGW("SURFACE", "processing failed");
         }
 
@@ -219,11 +221,7 @@ static void takeover_classification_task(void *pvParameters) {
 
         int idx = g_read_idx;
 
-        float score = 0.0f;
-        const char* category = NULL;
-        if (process_takeover_image(&g_buf[idx], score, &category)) {
-            ESP_LOGI("TAKEOVER", "Score: %.2f, Category: %s", score, category ? category : "NULL");
-        } else {
+        if (!process_takeover_image(&g_buf[idx])) {
             ESP_LOGW("TAKEOVER", "processing failed");
         }
 
@@ -232,6 +230,26 @@ static void takeover_classification_task(void *pvParameters) {
 }
 
 extern "C" void app_main(void) {
+    esp_err_t ret = nimble_port_init();
+    if (ret != ESP_OK) {
+        MODLOG_DFLT(ERROR, "Failed to init nimble %d \n", ret);
+        return;
+    }
+
+    /* Initialize the NimBLE host configuration */
+    ble_hs_cfg.sync_cb = on_sync;
+    ble_hs_cfg.reset_cb = on_reset;
+
+    int rc = gatt_svr_init();
+    assert(rc == 0);
+
+    /* Set the default device name */
+    rc = ble_svc_gap_device_name_set(device_name);
+    assert(rc == 0);
+
+    /* Start the task */
+    nimble_port_freertos_init(host_task);
+
     if (ESP_OK != init_camera()) {
         ESP_LOGE("CAM", "Camera init failed");
         return;
