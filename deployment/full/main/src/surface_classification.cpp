@@ -5,11 +5,7 @@ dl::Model *surface_model = nullptr;
 dl::image::ImagePreprocessor *m_surface_preprocessor = nullptr;
 
 bool initialize_surface_model() {
-    // TODO: but I am not even using an sd-card??
-    char dir[64];
-    snprintf(dir, sizeof(dir), "%s/espdl_models", CONFIG_BSP_SD_MOUNT_POINT);
-    
-    surface_model = new dl::Model((const char *)espdl_surface_model, dir);
+    surface_model = new dl::Model((const char *)espdl_surface_model);
     if (!surface_model) {
         ESP_LOGE("SURFACE", "Failed to create model");
         return false;

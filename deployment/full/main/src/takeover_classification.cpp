@@ -153,12 +153,8 @@ extern const uint8_t espdl_takeover_model[] asm("_binary_takeover_espdl_start");
 dl::Model *takeover_model = nullptr;
 dl::image::ImagePreprocessor *m_takeover_preprocessor = nullptr;
 
-bool initialize_takeover_model() {
-    // TODO: but I am not even using an sd-card??
-    char dir[64];
-    snprintf(dir, sizeof(dir), "%s/espdl_models", CONFIG_BSP_SD_MOUNT_POINT);
-    
-    takeover_model = new dl::Model((const char *)espdl_takeover_model, dir);
+bool initialize_takeover_model() {    
+    takeover_model = new dl::Model((const char *)espdl_takeover_model);
     if (!takeover_model) {
         ESP_LOGE("TAKEOVER", "Failed to create model");
         return false;
