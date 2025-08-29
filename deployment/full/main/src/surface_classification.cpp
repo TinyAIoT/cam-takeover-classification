@@ -1,6 +1,30 @@
 #include "surface_classification.hpp"
 
 extern const uint8_t espdl_model[] asm("_binary_surface_espdl_start");
+dl::Model *surface_model = nullptr;
+dl::image::ImagePreprocessor *m_surface_preprocessor = nullptr;
+
+bool initialize_surface_model() {
+    // TODO: but I am not even using an sd-card??
+    char dir[64];
+    snprintf(dir, sizeof(dir), "%s/espdl_models", CONFIG_BSP_SD_MOUNT_POINT);
+    
+    surface_model = new dl::Model((const char *)espdl_model, dir);
+    if (!surface_model) {
+        ESP_LOGE("SURFACE", "Failed to create model");
+        return false;
+    }
+
+    m_surface_preprocessor = new dl::image::ImagePreprocessor(surface_model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
+    if (!m_surface_preprocessor) {
+        ESP_LOGE("SURFACE", "Failed to create image preprocessor");
+        delete surface_model;
+        surface_model = nullptr;
+        return false;
+    }
+
+    return true;
+}
 
 bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &output_img) {
     // original height and width
@@ -37,34 +61,15 @@ bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &
 }
 
 const dl::cls::result_t run_surface_inference(dl::image::img_t &input_img) {
-    char dir[64];
-    snprintf(dir, sizeof(dir), "%s/espdl_models", CONFIG_BSP_SD_MOUNT_POINT);
-    
-    dl::Model *model = nullptr;
-    dl::image::ImagePreprocessor *m_image_preprocessor = nullptr;
-    
-    // TODO: do I really need to reinitialize the model everytime? It takes like a hundred millis each time
-    model = new dl::Model((const char *)espdl_model, dir);
-    if (!model) {
-        ESP_LOGE("SURFACE", "Failed to create model");
-        return {};
-    }
-    
     uint32_t t0, t1;
     float delta;
     t0 = esp_timer_get_time();
-    m_image_preprocessor = new dl::image::ImagePreprocessor(model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
-    if (!m_image_preprocessor) {
-        ESP_LOGE("SURFACE", "Failed to create image preprocessor");
-        delete model;
-        return {};
-    }
     
-    m_image_preprocessor->preprocess(input_img);
+    m_surface_preprocessor->preprocess(input_img);
 
-    model->run();
+    surface_model->run();
     const int check = 5;
-    SurfacePostProcessor m_postprocessor(model, check, std::numeric_limits<float>::lowest(), true);
+    SurfacePostProcessor m_postprocessor(surface_model, check, std::numeric_limits<float>::lowest(), true);
     std::vector<dl::cls::result_t> &results = m_postprocessor.postprocess();
 
     t1 = esp_timer_get_time();
@@ -81,16 +86,6 @@ const dl::cls::result_t run_surface_inference(dl::image::img_t &input_img) {
             best_result = res;  // Copy the result
             found_result = true;
         }
-    }
-    
-    // Free resources
-    if (m_image_preprocessor) {
-        delete m_image_preprocessor;
-        m_image_preprocessor = nullptr;
-    }
-    if (model) {
-        delete model;
-        model = nullptr;
     }
 
     return best_result;

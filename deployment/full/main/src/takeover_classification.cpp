@@ -150,7 +150,30 @@ struct ImageRingBuffer {
 
 ImageRingBuffer ring_buffer;
 extern const uint8_t espdl_model[] asm("_binary_takeover_espdl_start");
+dl::Model *takeover_model = nullptr;
+dl::image::ImagePreprocessor *m_takeover_preprocessor = nullptr;
 
+bool initialize_takeover_model() {
+    // TODO: but I am not even using an sd-card??
+    char dir[64];
+    snprintf(dir, sizeof(dir), "%s/espdl_models", CONFIG_BSP_SD_MOUNT_POINT);
+    
+    takeover_model = new dl::Model((const char *)espdl_model, dir);
+    if (!takeover_model) {
+        ESP_LOGE("TAKEOVER", "Failed to create model");
+        return false;
+    }
+
+    m_takeover_preprocessor = new dl::image::ImagePreprocessor(takeover_model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
+    if (!m_takeover_preprocessor) {
+        ESP_LOGE("TAKEOVER", "Failed to create image preprocessor");
+        delete takeover_model;
+        takeover_model = nullptr;
+        return false;
+    }
+
+    return true;
+}
 
 bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t &output_img) {
     // original height and width
@@ -206,35 +229,16 @@ bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t 
     return true;
 }
 
-const dl::cls::result_t run_takeover_inference(dl::image::img_t &input_img) {
-    char dir[64];
-    snprintf(dir, sizeof(dir), "%s/espdl_models", CONFIG_BSP_SD_MOUNT_POINT);
-    
-    dl::Model *model = nullptr;
-    dl::image::ImagePreprocessor *m_image_preprocessor = nullptr;
-    
-    // TODO: do I really need to reinitialize the model everytime? It takes like a hundred millis each time
-    model = new dl::Model((const char *)espdl_model, dir);
-    if (!model) {
-        ESP_LOGE("TAKEOVER", "Failed to create model");
-        return {};
-    }
-    
+const dl::cls::result_t run_takeover_inference(dl::image::img_t &input_img) {    
     uint32_t t0, t1;
     float delta;
     t0 = esp_timer_get_time();
-    m_image_preprocessor = new dl::image::ImagePreprocessor(model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
-    if (!m_image_preprocessor) {
-        ESP_LOGE("TAKEOVER", "Failed to create image preprocessor");
-        delete model;
-        return {};
-    }
     
-    m_image_preprocessor->preprocess(input_img);
+    m_takeover_preprocessor->preprocess(input_img);
 
-    model->run();
+    takeover_model->run();
     const int check = 5;
-    TakeoverPostProcessor m_postprocessor(model, check, std::numeric_limits<float>::lowest(), true);
+    TakeoverPostProcessor m_postprocessor(takeover_model, check, std::numeric_limits<float>::lowest(), true);
     std::vector<dl::cls::result_t> &results = m_postprocessor.postprocess();
 
     t1 = esp_timer_get_time();
@@ -251,16 +255,6 @@ const dl::cls::result_t run_takeover_inference(dl::image::img_t &input_img) {
             best_result = res;  // Copy the result
             found_result = true;
         }
-    }
-    
-    // Free resources
-    if (m_image_preprocessor) {
-        delete m_image_preprocessor;
-        m_image_preprocessor = nullptr;
-    }
-    if (model) {
-        delete model;
-        model = nullptr;
     }
 
     return best_result;

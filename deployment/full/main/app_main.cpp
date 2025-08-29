@@ -160,7 +160,7 @@ static void camera_capture_task(void *pvParameters) {
             continue;
         }
 
-        // --- Framerate calculation ---
+        // Framerate calculation
         uint32_t now = xTaskGetTickCount();
         if (last_capture_time != 0) {
             float seconds = (now - last_capture_time) * portTICK_PERIOD_MS / 1000.0f;
@@ -170,7 +170,6 @@ static void camera_capture_task(void *pvParameters) {
             }
         }
         last_capture_time = now;
-        // --- End framerate calculation ---
 
         // Publish the new frame by flipping read_idx atomically (single int write is atomic on ESP32)
         g_read_idx = g_write_idx;
@@ -185,9 +184,15 @@ static void camera_capture_task(void *pvParameters) {
 }
 
 static void surface_classification_task(void *pvParameters) {
+    if (!initialize_surface_model()) {
+        ESP_LOGE("SURFACE", "Failed to initialize surface model");
+        vTaskDelete(NULL);
+    }
     for (;;) {
         // Wait for a new frame
         xSemaphoreTake(g_sem_start_surface, portMAX_DELAY);
+        ESP_LOGI("SURFACE", "start processing");
+
 
         // Read current frame index AFTER take: memory order is fine through semaphore
         int idx = g_read_idx;
@@ -200,15 +205,20 @@ static void surface_classification_task(void *pvParameters) {
             ESP_LOGW("SURFACE", "processing failed");
         }
 
-        // Signal done
+        ESP_LOGI("SURFACE", "end processing");
         xSemaphoreGive(g_sem_done_surface);
     }
 }
 
 static void takeover_classification_task(void *pvParameters) {
+    if (!initialize_takeover_model()) {
+        ESP_LOGE("TAKEOVER", "Failed to initialize takeover model");
+        vTaskDelete(NULL);
+    }
     for (;;) {
         // Wait for a new frame
         xSemaphoreTake(g_sem_start_takeover, portMAX_DELAY);
+        ESP_LOGI("TAKEOVER", "start processing");
 
         int idx = g_read_idx;
 
@@ -220,7 +230,7 @@ static void takeover_classification_task(void *pvParameters) {
             ESP_LOGW("TAKEOVER", "processing failed");
         }
 
-        // Signal done
+        ESP_LOGI("TAKEOVER", "end processing");
         xSemaphoreGive(g_sem_done_takeover);
     }
 }
