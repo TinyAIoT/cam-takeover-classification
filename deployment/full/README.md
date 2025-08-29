@@ -6,7 +6,7 @@ The camera captures an image and then triggers surface and takeover classificati
 
 ## TODO
 
-- [ ] BLE
+- [x] BLE
 - [ ] measure distance of takeover with ToF
 - [ ] acceleration sensor?
 - [ ] increase framerate
