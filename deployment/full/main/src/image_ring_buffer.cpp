@@ -21,19 +21,25 @@ ImageRingBuffer::~ImageRingBuffer() {
 }
 
 bool ImageRingBuffer::add_image(const dl::image::img_t& img) {
-    // Free existing data at this position if any
-    if (images_[write_index_].data) {
-        free(images_[write_index_].data);
-    }
-    
     // Allocate new memory and copy image data
     size_t data_size = img.height * img.width * 3; // RGB888: 3 bytes per pixel
-    // TODO: fix memory leak
-    // if (images_[write_index].data) {
-    //     free(images_[write_index].data);
-    //     images_[write_index].data = nullptr;
-    // }
-    images_[write_index_].data = malloc(data_size);
+    
+    if (images_[write_index_].data) {
+        size_t old_size = images_[write_index_].height * images_[write_index_].width * 3;
+        if (old_size != data_size) {
+            free(images_[write_index_].data);
+            images_[write_index_].data = nullptr;
+        }
+    }
+
+    // Allocate if needed
+    if (!images_[write_index_].data) {
+        images_[write_index_].data = malloc(data_size);
+        if (!images_[write_index_].data) {
+            ESP_LOGE("TAKEOVER", "Memory allocation failed for ring buffer");
+            return false;
+        }
+    }
     if (!images_[write_index_].data) {
         ESP_LOGE("TAKEOVER", "Memory allocation failed for ring buffer");
         return false;
@@ -85,12 +91,8 @@ bool ImageRingBuffer::compose_4x4_image(dl::image::img_t& output_img) {
     output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
     
     size_t total_size = composed_width * composed_height * 3; // RGB888: 3 bytes per pixel
-    // TODO: fix memory leak
-    // if (output_img.data) {
-    //     free(output_img.data);
-    //     output_img.data = nullptr;
-    // }
     output_img.data = malloc(total_size);
+
     if (!output_img.data) {
         ESP_LOGE("RING_BUFFER", "Memory allocation failed for composed image");
         return false;

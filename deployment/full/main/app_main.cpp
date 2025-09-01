@@ -102,8 +102,6 @@ static bool capture_image(dl::image::img_t &output_img) {
     output_img.width = pic->width;
     output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB565;
 
-    // Free previously allocated memory to avoid leaks and buffer overflows
-
     if (output_img.data) {
         free(output_img.data);
         output_img.data = nullptr;

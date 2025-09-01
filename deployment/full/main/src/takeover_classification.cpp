@@ -40,11 +40,6 @@ bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t 
     cropped_img.height = y_max-y_min;
     cropped_img.width = x_max-x_min;
     cropped_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-    // TODO: fix memory leak
-    // if (cropped_img.data) {
-    //     free(cropped_img.data);
-    //     cropped_img.data = nullptr;
-    // }
     cropped_img.data = malloc(cropped_img.height * cropped_img.width * 3); // RGB888: 3 bytes per pixel
 
     if (!cropped_img.data) {
@@ -63,11 +58,6 @@ bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t 
     output_img.height = target_h;
     output_img.width = target_w;
     output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-    // TODO: fix memory leak
-    // if (output_img.data) {
-    //     free(output_img.data);
-    //     output_img.data = nullptr;
-    // }
     output_img.data = malloc(target_h * target_w * 3); // RGB888: 3 bytes per pixel
 
     // Convert using ESP-DL
@@ -136,6 +126,11 @@ bool process_takeover_image(const dl::image::img_t* input_img) {
         }
 
         const auto results = run_takeover_inference(composed_img);
+
+        if (composed_img.data) {
+            free(composed_img.data);
+            composed_img.data = nullptr;
+        }
         
         uint8_t scores[2] = {
             static_cast<uint8_t>(results[0].score * 100),
