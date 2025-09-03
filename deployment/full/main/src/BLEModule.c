@@ -40,20 +40,16 @@ static bool notify_state;
 
 static uint16_t conn_handle;
 
-static int
-gatt_svr_chr_access_surface_classification(uint16_t conn_handle, uint16_t attr_handle,
+static int gatt_svr_chr_access_surface_classification(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg);
 
-static int
-gatt_svr_chr_access_takeover_classification(uint16_t conn_handle, uint16_t attr_handle,
+static int gatt_svr_chr_access_takeover_classification(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg);
 
-static int
-gatt_svr_chr_access_distance(uint16_t conn_handle, uint16_t attr_handle,
+static int gatt_svr_chr_access_distance(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg);
 
-int
-gap_event(struct ble_gap_event *event, void *arg)
+int gap_event(struct ble_gap_event *event, void *arg)
 {
     switch (event->type) {
     case BLE_GAP_EVENT_CONNECT:
@@ -105,8 +101,7 @@ gap_event(struct ble_gap_event *event, void *arg)
     return 0;
 }
 
-void
-print_addr(const void *addr)
+void print_addr(const void *addr)
 {
     const uint8_t *u8p;
 
@@ -115,8 +110,7 @@ print_addr(const void *addr)
                 u8p[5], u8p[4], u8p[3], u8p[2], u8p[1], u8p[0]);
 }
 
-void
-on_sync(void)
+void on_sync(void)
 {
     int rc;
 
@@ -134,19 +128,35 @@ on_sync(void)
     advertise();
 }
 
-void
-on_reset(int reason)
+void on_reset(int reason)
 {
     MODLOG_DFLT(ERROR, "Resetting state; reason=%d\n", reason);
 }
 
-void
-notify_surface_classification(uint8_t values[4])
+void encodeU8ArrayAsFloatBytes(const uint8_t* in, size_t n, uint8_t* out) {
+    for (size_t i = 0; i < n; ++i) {
+        float f = (float)in[i];   /* e.g., 42 -> 42.0f */
+        uint32_t u;
+        memcpy(&u, &f, 4);        /* safely grab the bits */
+
+        /* write bytes explicitly as little-endian */
+        out[4*i + 0] = (uint8_t)(u & 0xFFu);
+        out[4*i + 1] = (uint8_t)((u >> 8)  & 0xFFu);
+        out[4*i + 2] = (uint8_t)((u >> 16) & 0xFFu);
+        out[4*i + 3] = (uint8_t)((u >> 24) & 0xFFu);
+    }
+}
+
+void notify_surface_classification(uint8_t values[4])
 {
     int rc;
 
     if (notify_state) {
-        struct os_mbuf *om = ble_hs_mbuf_from_flat(values, 4);
+        // convert to IEEE-754
+        uint8_t out[4 * 4];
+        encodeU8ArrayAsFloatBytes(values, 4, out);
+
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(out, 4*4);
         if (om == NULL) {
             MODLOG_DFLT(ERROR, "error allocating mbuf for notification\n");
             return;
@@ -159,13 +169,16 @@ notify_surface_classification(uint8_t values[4])
     }
 }
 
-void
-notify_takeover_classification(uint8_t values[2])
+void notify_takeover_classification(uint8_t values[1])
 {
     int rc;
 
     if (notify_state) {
-        struct os_mbuf *om = ble_hs_mbuf_from_flat(values, 2);
+        // convert to IEEE-754
+        uint8_t out[1 * 4];
+        encodeU8ArrayAsFloatBytes(values, 1, out);
+
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(out, 1*4);
         if (om == NULL) {
             MODLOG_DFLT(ERROR, "error allocating mbuf for notification\n");
             return;
@@ -178,13 +191,16 @@ notify_takeover_classification(uint8_t values[2])
     }
 }
 
-void
-notify_distance(uint8_t values[1])
+void notify_distance(uint8_t values[1])
 {
     int rc;
 
     if (notify_state) {
-        struct os_mbuf *om = ble_hs_mbuf_from_flat(values, 1);
+        // convert to IEEE-754
+        uint8_t out[1 * 4];
+        encodeU8ArrayAsFloatBytes(values, 1, out);
+
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(out, 1*4);
         if (om == NULL) {
             MODLOG_DFLT(ERROR, "error allocating mbuf for notification\n");
             return;
@@ -202,8 +218,7 @@ notify_distance(uint8_t values[1])
  *     o General discoverable mode
  *     o Undirected connectable mode
  */
-void
-advertise(void)
+void advertise(void)
 {
     struct ble_gap_adv_params adv_params;
     struct ble_hs_adv_fields fields;

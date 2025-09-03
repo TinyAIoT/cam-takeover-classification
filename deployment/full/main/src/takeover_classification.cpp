@@ -131,9 +131,8 @@ bool process_takeover_image(const dl::image::img_t* input_img) {
             free(composed_img.data);
             composed_img.data = nullptr;
         }
-        
-        uint8_t scores[2] = {
-            static_cast<uint8_t>(results[0].score * 100),
+
+        uint8_t scores[1] = {
             static_cast<uint8_t>(results[1].score * 100)
         };
 
