@@ -7,7 +7,8 @@ The camera captures an image and then triggers surface and takeover classificati
 ## TODO
 
 - [x] BLE
-- [ ] measure distance of takeover with ToF
+- [x] measure distance of takeover with ToF
+    - [ ] I have to disconnect power to use this. otherwise I get a NACK issue
 - [ ] second ToF
 - [x] fix memory leak (overflow after ~30s)
 - [ ] acceleration sensor?

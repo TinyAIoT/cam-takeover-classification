@@ -36,6 +36,7 @@
 #include "include/takeover_classification.hpp"
 #include "include/surface_classification.hpp"
 #include "include/led.hpp"
+#include "include/distance.hpp"
 
 // Support IDF 5.x
 #ifndef portTICK_RATE_MS
@@ -139,6 +140,7 @@ static EventGroupHandle_t g_frame_evt;
 // Semaphores to signal producer that each classifier finished
 static SemaphoreHandle_t g_sem_done_surface;
 static SemaphoreHandle_t g_sem_done_takeover;
+static SemaphoreHandle_t g_sem_done_distance;
 
 // Optional: a mutex if your img_t needs guarded access during capture
 // (generally not needed with strict read/write separation via indices)
@@ -158,6 +160,7 @@ static void camera_capture_task(void *pvParameters) {
         // Wait until both consumers are done with the previous frame
         xSemaphoreTake(g_sem_done_surface, portMAX_DELAY);
         xSemaphoreTake(g_sem_done_takeover, portMAX_DELAY);
+        xSemaphoreTake(g_sem_done_distance, portMAX_DELAY);
 
         // Capture into write buffer
         if (!capture_into_buffer(g_write_idx)) {
@@ -183,7 +186,7 @@ static void camera_capture_task(void *pvParameters) {
         // Flip write index for the next capture
         g_write_idx ^= 1;
 
-        xEventGroupSetBits(g_frame_evt, BIT0 | BIT1);  // release both Surface and takeover
+        xEventGroupSetBits(g_frame_evt, BIT0 | BIT1 | BIT2);  // release both Surface and takeover
     }
 }
 
@@ -232,6 +235,21 @@ static void takeover_classification_task(void *pvParameters) {
     }
 }
 
+static void distance_task(void *pvParameters) {
+    if (!init_distance()) {
+        set_LED(255, 0, 150, 20);
+        ESP_LOGE("DISTANCE", "Failed to initialize distance sensor"); 
+        vTaskDelete(NULL);
+    }
+    for (;;) {
+        xEventGroupWaitBits(g_frame_evt, BIT2, pdTRUE, pdTRUE, portMAX_DELAY); // DISTANCE waits BIT2
+        float distance = get_distance();
+        ESP_LOGI("DISTANCE", "Distance: %.2f cm", distance);
+
+        xSemaphoreGive(g_sem_done_distance);
+    }
+}
+
 extern "C" void app_main(void) {
     init_LED(); // initialize RGB-LED
     set_LED(255, 255, 0, 20);
@@ -262,13 +280,16 @@ extern "C" void app_main(void) {
     configASSERT(g_frame_evt != NULL);
     g_sem_done_surface   = xSemaphoreCreateBinary();
     g_sem_done_takeover  = xSemaphoreCreateBinary();
+    g_sem_done_distance  = xSemaphoreCreateBinary();
 
     // they need to be given because otherwise the camera capture will not start
     xSemaphoreGive(g_sem_done_surface);
     xSemaphoreGive(g_sem_done_takeover);
+    xSemaphoreGive(g_sem_done_distance);
 
     set_LED(0, 255, 0, 10);
 
+    xTaskCreatePinnedToCore(distance_task,                  "distance", 8192*2, NULL, 13, NULL, 0);
     xTaskCreatePinnedToCore(camera_capture_task,            "camera",   8192*2, NULL, 12, NULL, 0);
     xTaskCreatePinnedToCore(surface_classification_task,    "surface",  8192*2, NULL, 17, NULL, 0);
     xTaskCreatePinnedToCore(takeover_classification_task,   "takeover",8192*2, NULL, 20, NULL, 1);

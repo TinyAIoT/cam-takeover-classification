@@ -80,7 +80,7 @@ bool ImageRingBuffer::compose_4x4_image(dl::image::img_t& output_img) {
         return false;
     }
     
-    // Assuming all images are 24x24 (from convert_takeover_image)
+    // Assuming all images are 24x24
     const int single_img_size = 24;
     const int grid_size = 4;
     const int composed_width = single_img_size * grid_size;  // 96
