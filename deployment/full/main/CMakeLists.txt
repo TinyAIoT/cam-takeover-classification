@@ -5,9 +5,13 @@ if(CONFIG_MODEL_DENSENET)
     message(WARNING "DENSENET MIGHT BE TO BIG TO FIT INTO MEMORY")
 endif()
 set(src_dirs        ./
+                    ../components/Adafruit_NeoPixel
+                    ../components/VL53L8CX/src
                     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 set(include_dirs    ./
+                    ../components/Adafruit_NeoPixel
+                    ../components/VL53L8CX/src
                     ${CMAKE_CURRENT_SOURCE_DIR}/include
                     ${CMAKE_CURRENT_SOURCE_DIR}/include/surface
                     ${CMAKE_CURRENT_SOURCE_DIR}/include/takeover)

@@ -29,10 +29,13 @@
 #include <sys/stat.h>
 #include <cstring>
 
+#include "Arduino.h" // TODO: do I need this?
+
 #include "include/BLEModule.h"
 #include "include/camera_pins.h"
 #include "include/takeover_classification.hpp"
 #include "include/surface_classification.hpp"
+#include "include/led.hpp"
 
 // Support IDF 5.x
 #ifndef portTICK_RATE_MS
@@ -186,6 +189,7 @@ static void camera_capture_task(void *pvParameters) {
 
 static void surface_classification_task(void *pvParameters) {
     if (!initialize_surface_model()) {
+        set_LED(255, 0, 150, 20);
         ESP_LOGE("SURFACE", "Failed to initialize surface model");
         vTaskDelete(NULL);
     }
@@ -208,6 +212,7 @@ static void surface_classification_task(void *pvParameters) {
 
 static void takeover_classification_task(void *pvParameters) {
     if (!initialize_takeover_model()) {
+        set_LED(255, 0, 150, 20);
         ESP_LOGE("TAKEOVER", "Failed to initialize takeover model");
         vTaskDelete(NULL);
     }
@@ -228,28 +233,27 @@ static void takeover_classification_task(void *pvParameters) {
 }
 
 extern "C" void app_main(void) {
+    init_LED(); // initialize RGB-LED
+    set_LED(255, 255, 0, 20);
+
     esp_err_t ret = nimble_port_init();
     if (ret != ESP_OK) {
         MODLOG_DFLT(ERROR, "Failed to init nimble %d \n", ret);
+        set_LED(255, 50, 0, 20);
         return;
     }
-
-    /* Initialize the NimBLE host configuration */
     ble_hs_cfg.sync_cb = on_sync;
     ble_hs_cfg.reset_cb = on_reset;
-
     int rc = gatt_svr_init();
     assert(rc == 0);
-
-    /* Set the default device name */
     rc = ble_svc_gap_device_name_set(device_name);
     assert(rc == 0);
 
-    /* Start the task */
     nimble_port_freertos_init(host_task);
 
     if (ESP_OK != init_camera()) {
         ESP_LOGE("CAM", "Camera init failed");
+        set_LED(255, 50, 0, 20);
         return;
     }
 
@@ -259,12 +263,13 @@ extern "C" void app_main(void) {
     g_sem_done_surface   = xSemaphoreCreateBinary();
     g_sem_done_takeover  = xSemaphoreCreateBinary();
 
-    // On the very first iteration, the producer will block waiting for both "done".
-    // Give them once so the first capture can happen immediately:
+    // they need to be given because otherwise the camera capture will not start
     xSemaphoreGive(g_sem_done_surface);
     xSemaphoreGive(g_sem_done_takeover);
 
-    xTaskCreatePinnedToCore(camera_capture_task,       "camera",   8192*2, NULL, 12, NULL, 0);
-    xTaskCreatePinnedToCore(surface_classification_task,"surface",  8192*2, NULL, 17, NULL, 0);
-    xTaskCreatePinnedToCore(takeover_classification_task,"takeover",8192*2, NULL, 20, NULL, 1);
+    set_LED(0, 255, 0, 10);
+
+    xTaskCreatePinnedToCore(camera_capture_task,            "camera",   8192*2, NULL, 12, NULL, 0);
+    xTaskCreatePinnedToCore(surface_classification_task,    "surface",  8192*2, NULL, 17, NULL, 0);
+    xTaskCreatePinnedToCore(takeover_classification_task,   "takeover",8192*2, NULL, 20, NULL, 1);
 }

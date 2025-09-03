@@ -8,6 +8,7 @@ The camera captures an image and then triggers surface and takeover classificati
 
 - [x] BLE
 - [ ] measure distance of takeover with ToF
+- [ ] second ToF
 - [x] fix memory leak (overflow after ~30s)
 - [ ] acceleration sensor?
 - [ ] increase framerate
@@ -15,3 +16,6 @@ The camera captures an image and then triggers surface and takeover classificati
 - [ ] better models
     - more data
     - ideaB for takeover classification
+- refactoring
+    - [ ] sensor class (+ class for classifications?)
+- [x] RGB-LED
