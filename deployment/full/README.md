@@ -22,5 +22,5 @@ The camera captures an image and then triggers surface and takeover classificati
     - [ ] clean up BLE
     - [ ] subfolders (somehow thats not trivial... I have issues with the cmake)
 - [x] fix memory leak (overflow after ~30s)
-    - [ ] fix other memory issue (heap != NULL && "free() target pointer is outside heap areas")
+    - [x] fix other memory issue (heap != NULL && "free() target pointer is outside heap areas")
 - [x] RGB-LED

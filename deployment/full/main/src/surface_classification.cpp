@@ -38,11 +38,6 @@ bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &
     output_img.height = y_max-y_min;
     output_img.width = x_max-x_min;
     output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-    if (output_img.data) {
-        free(output_img.data);
-        output_img.data = nullptr;
-    }
-
     output_img.data = malloc(output_img.height * output_img.width * 3); // RGB888: 3 bytes per pixel
 
     if (!output_img.data) {
