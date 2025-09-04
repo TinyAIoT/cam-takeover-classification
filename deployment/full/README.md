@@ -2,7 +2,7 @@
 ![system design](../../figures/system_design.png)
 (currently idea A is implemented)
 
-The camera captures an image and then triggers surface and takeover classification in parallel. Current framerate is ~2.75Hz. Goal framerate is 5Hz (or more). Running the two classification tasks in parallel is somehow a little slower than running them serially. The model inference doubles in parallel mode (270ms) compared to serial mode (110ms).
+The camera captures an image and then triggers surface and takeover classification in parallel. Current framerate is ~3.5Hz. Goal framerate is 5Hz (or more). Running the two classification tasks in parallel is somehow a little slower than running them serially. The model inference doubles in parallel mode (110-270ms) compared to serial mode (110ms).
 
 ## TODO
 
@@ -15,7 +15,7 @@ The camera captures an image and then triggers surface and takeover classificati
 - [ ] increase framerate
     - smaller models (4bit instead of 8bit)
         - this is prob not going to make it faster... just smaller... but Ill still try
-    - [x] classify serially and with multicore -> this made the first classification to run much faster!
+    - [x] classify serially and with multicore -> this made the first classification run much faster!
     - [x] mutex -> didnt help
 - [ ] better models
     - more data
