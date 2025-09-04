@@ -59,8 +59,7 @@ const std::vector<dl::cls::result_t> run_surface_inference(dl::image::img_t &inp
     
     m_surface_preprocessor->preprocess(input_img);
 
-    // TODO: try serializing model run with mutex
-    surface_model->run();
+    surface_model->run(dl::RUNTIME_MODE_MULTI_CORE);
     const int check = 5;
     SurfacePostProcessor m_postprocessor(surface_model, check, std::numeric_limits<float>::lowest(), true);
     std::vector<dl::cls::result_t> &results = m_postprocessor.postprocess();
@@ -87,10 +86,10 @@ bool process_surface_image(const dl::image::img_t* input_img) {
 
     float scores[5] = {
         results[0].score,
+        results[3].score,
         results[1].score,
         results[2].score,
-        results[3].score,
-        results[4].score
+        (float)0.0f // placeholder for standing
     };
 
     notify_surface_classification(scores);

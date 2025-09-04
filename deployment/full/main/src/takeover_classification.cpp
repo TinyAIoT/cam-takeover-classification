@@ -75,8 +75,7 @@ const std::vector<dl::cls::result_t> run_takeover_inference(dl::image::img_t &in
     
     m_takeover_preprocessor->preprocess(input_img);
 
-    // TODO: try serializing model run with mutex
-    takeover_model->run();
+    takeover_model->run(dl::RUNTIME_MODE_MULTI_CORE);
     const int check = 5;
     TakeoverPostProcessor m_postprocessor(takeover_model, check, std::numeric_limits<float>::lowest(), true);
     std::vector<dl::cls::result_t> &results = m_postprocessor.postprocess();
@@ -133,7 +132,7 @@ bool process_takeover_image(const dl::image::img_t* input_img) {
         }
 
         float scores[1] = {
-            results[1].score
+            (float)(results[1].score)
         };
 
         notify_takeover_classification(scores);

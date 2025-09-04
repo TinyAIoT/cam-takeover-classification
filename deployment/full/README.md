@@ -14,6 +14,9 @@ The camera captures an image and then triggers surface and takeover classificati
 - [ ] acceleration sensor?
 - [ ] increase framerate
     - smaller models (4bit instead of 8bit)
+        - this is prob not going to make it faster... just smaller... but Ill still try
+    - [x] classify serially and with multicore -> this made the first classification to run much faster!
+    - [x] mutex -> didnt help
 - [ ] better models
     - more data
     - ideaB for takeover classification
