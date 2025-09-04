@@ -36,6 +36,8 @@ class ModelFactory:
             model = self._create_densenet(num_classes)
         elif self.model_type == "squeezenet":
             model = self._create_squeezenet(num_classes)
+        elif self.model_type == "custom":
+            model = self._create_custom(num_classes)
         elif self.model_type == "mnasnet":
             model = self._create_mnasnet(num_classes)
         else:
@@ -129,6 +131,29 @@ class ModelFactory:
         """
         model = torchvision.models.squeezenet1_1(weights='DEFAULT')
         model.classifier[1] = nn.Conv2d(512, num_classes, kernel_size=1)
+        return model
+    
+    def _create_custom(self, num_classes):
+        """Create custom model with a reshape layer before SqueezeNet
+        Args:
+            num_classes (int): Number of output classes for the model
+        Returns:
+            model (torch.nn.Module): Custom model with reshape layer and modified classifier
+        """
+        class CustomSqueezeNet(nn.Module):
+            def __init__(self, num_classes):
+                super().__init__()
+                # Reshape input: (3, 96, 96) -> (16, 24, 24)
+                self.prep = nn.Conv2d(3, 16, kernel_size=3, stride=4, padding=1)
+                self.squeezenet = torchvision.models.squeezenet1_1(weights='DEFAULT')
+                self.squeezenet.classifier[1] = nn.Conv2d(512, num_classes, kernel_size=1)
+            
+            def forward(self, x):
+                x = self.prep(x)
+                x = self.squeezenet(x)
+                return x
+
+        model = CustomSqueezeNet(num_classes)
         return model
     
     def _create_mnasnet(self, num_classes):
