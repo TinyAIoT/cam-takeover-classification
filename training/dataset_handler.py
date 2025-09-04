@@ -75,6 +75,8 @@ class DatasetHandler:
                     height = params["height"]
                     width = params["width"]
                     dataset_transforms.append(L(lambda img: F.crop(img, top, left, height, width)))
+                if "grayscale" in t:
+                    dataset_transforms.append(transforms.Grayscale(num_output_channels=1))
                 if "save_img" in t:
                     params = t["save_img"]
                     n = params.get("n", 100)

@@ -1,8 +1,22 @@
 img_height: 96
 img_width: 96
-batch_size: 64
+batch_size: 32
 patience: 5
 dataset_path: data/split_classified
+datasets: # List of datasets to be used for training
+  - name: takeover      # Name of the dataset (required)
+    path: data/split_classified # Path to the dataset (required)
+    transforms: # List of ordered transformations to be applied to the dataset, choose order and type based on your dataset and model
+      - grayscale      
+      - save_img : {n: 50, save_dir: "data/transforms_debug/datset"} # Save every nth image to the specified directory for debugging
+      # ToTensor using torchvision.transforms.ToTensor
+      # Converts a PIL Image or numpy.ndarray (H x W x C) in the range [0, 255] to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0]
+      - ToTensor 
+
+      # Normalization using torchvision.transforms.Normalize
+      - normalize: {mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225]}
+            # mean (sequence) – Sequence of means for each channel.
+            # std (sequence) – Sequence of standard deviations for each channel.
 model_name: torch_squeezy_org
 model_type: squeezenet
 num_workers: 16
