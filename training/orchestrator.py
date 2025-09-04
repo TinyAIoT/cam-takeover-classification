@@ -77,6 +77,7 @@ class Orchestrator:
             epochs=self.config["transfer_learning_epochs"], 
             learning_rate=self.config["transfer_learning_rate"], 
             weight_decay=self.config["transfer_weight_decay"],
+            patience=self.config["patience"],
             phase_name='transfer_learning',
             checkpoint_prefix=f"{self.model_name}_transfer_learning",
             profile=self.profile_mode
@@ -100,6 +101,7 @@ class Orchestrator:
                 epochs=self.config['fine_tune_epochs'],
                 learning_rate=self.config['fine_tuning_learning_rate'],
                 weight_decay=self.config['fine_tuning_weight_decay'],
+                patience=self.config["patience"],
                 phase_name='fine_tuning',
                 checkpoint_prefix=f"{self.model_name}_fine_tuning",
                 profile=self.profile_mode
@@ -125,18 +127,15 @@ class Orchestrator:
         self.initial_epochs = tl_last_epoch
         print(f"Initial epochs: {self.initial_epochs}")
 
-
-        evaluation_results = self.evaluator.evaluate_model(
-            self.model, 
-            final_history, 
-            best_model=True, 
-            best_epoch=self.best_epoch, 
-            last_epoch=self.last_epoch,
-            model_name=f"{self.model_name}_fine_tuning" if self.fine_tuning_history else f"{self.model_name}_transfer_learning"
-        )
+        best_model_weights_path=os.path.join(self.output_path, (f"{self.model_name}_fine_tuning" if self.fine_tuning_history else f"{self.model_name}_transfer_learning") + ".pt") 
+        evaluation_results = self.evaluator.evaluate_model(self.model, best_model_weights_path)
         
         # Step 6: Generate visualizations and reports
         print("\n6. Generating visualizations and reports...")
+        best_train_acc = final_history['accuracy'][self.best_epoch]
+        best_val_acc = final_history['val_accuracy'][self.best_epoch]
+        self.evaluator.save_test_metrics(best_train_acc, best_val_acc, evaluation_results['test_accuracy'], "best-")
+        self.evaluator.plot_confusion_matrix(evaluation_results['confusion_matrix'], self.dataset_handler.get_class_names())
         self.evaluator.plot_training_history(final_history, self.initial_epochs if self.fine_tuning_history else None)
         self.evaluator.generate_evaluation_report(evaluation_results)
         
@@ -196,6 +195,7 @@ class Orchestrator:
             epochs=self.config["transfer_learning_epochs"],
             learning_rate=self.config["transfer_learning_rate"], 
             weight_decay=self.config["transfer_weight_decay"],
+            patience=self.config["patience"],
             phase_name='transfer_learning',
             checkpoint_prefix=f"{self.model_name}_transfer_learning",
             profile=self.profile_mode
@@ -238,7 +238,7 @@ class Orchestrator:
         
         if load_transfer_learning_checkpoint:
             # Load the best transfer learning checkpoint
-            self.trainer.load_checkpoint(self.model, 
+            self.model_factory.load_checkpoint(self.model, 
                                          os.path.join(self.output_path, f"{self.model_name}_transfer_learning.pt"))
         
         print("Running fine-tuning phase only...")
@@ -253,6 +253,7 @@ class Orchestrator:
                 epochs=self.config['fine_tune_epochs'],
                 learning_rate=self.config['fine_tuning_learning_rate'],
                 weight_decay=self.config['fine_tuning_weight_decay'],
+                patience=self.config["patience"],
                 phase_name='fine_tuning',
                 checkpoint_prefix=f"{self.model_name}_fine_tuning",
                 profile=self.profile_mode
@@ -280,22 +281,24 @@ class Orchestrator:
             self.model = model
         
         if self.model is None:
-            raise ValueError("Model not created. Run run_transfer_learning_pipeline() first or create model manually.")
-        
-        if model_path:
-            self.trainer.load_checkpoint(self.model, model_path)
+            # Step 1: Load and preprocess data
+            print("\n1. Loading and preprocessing data...")
+            self.dataset_handler.load_data()
+            self.dataset_handler.preprocess_data()
+            
+            # Step 2: Create model
+            print("\n2. Creating model...")
+            num_classes = len(self.dataset_handler.get_class_names())
+            device = self.dataset_handler.get_device()
+            self.model = self.model_factory.create_model(num_classes, device)   
+            if model_path:
+                self.model_factory.load_checkpoint(self.model, model_path)
         
         print("Running evaluation phase only...")
-        final_history = {key: self.transfer_learning_history[key] + self.fine_tuning_history[key] for key in self.transfer_learning_history} if self.fine_tuning_history else self.transfer_learning_history
-        evaluation_results = self.evaluator.evaluate_model(
-            self.model, 
-            final_history or {'accuracy': [], 'val_accuracy': []}, 
-            best_model=True, 
-            best_epoch=self.best_epoch + self.initial_epochs if self.fine_tuning_history else self.best_epoch, 
-            last_epoch=self.last_epoch + self.initial_epochs if self.fine_tuning_history else self.last_epoch,
-        )
+        evaluation_results = self.evaluator.evaluate_model(self.model)
         
-        self.evaluator.plot_training_history(final_history or {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}, self.initial_epochs if self.fine_tuning_history else None)
+        self.evaluator.save_test_metrics(0, 0, evaluation_results['test_accuracy'], "best-")
+        self.evaluator.plot_confusion_matrix(evaluation_results['confusion_matrix'], self.dataset_handler.get_class_names())
         self.evaluator.generate_evaluation_report(evaluation_results)
         
         return evaluation_results

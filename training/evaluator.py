@@ -20,72 +20,71 @@ class Evaluator:
         self.output_path = os.path.join(config["output_path"], self.model_name)
         self.dataset_handler = dataset_handler
         
-    def evaluate_model(self, model, history, best_model=False, best_epoch=0, last_epoch=0, model_name=None):
+    def evaluate_model(self, model, weigths_path=None):
         """Evaluate the model on test data
         Args:
             model (torch.nn.Module): The model to evaluate
-            history (dict): Training history containing metrics
-            best_model (bool): Whether to load the best model for evaluation
-            best_epoch (int): Epoch number of the best model
-            last_epoch (int): Last epoch number for evaluation
-            model_name (str): Name of the model to use for saving results
+            weigths_path (str, optional): Path to the model weights file. If provided, loads these weights before evaluation.
         Returns:
             dict: Dictionary containing evaluation metrics such as test loss, accuracy, precision, recall, and F1 score
         """
         _, _, test_loader = self.dataset_handler.get_data_loaders()
         
-        if model_name is None:
-            model_name = self.model_name
-        
+        print("Test loader structure:")
+        self.dataset_handler.print_data_loader_structure(test_loader)
+                
         # Load best model if requested
-        if best_model:
-            print(f"Loading best model for tests from {os.path.join(self.output_path, model_name + '.pt')}")
-            model.load_state_dict(torch.load(os.path.join(self.output_path, model_name + ".pt")))
-            epoch = best_epoch
-        else:
-            epoch = last_epoch
+        if weigths_path:
+            print(f"Loading weights for evalutation from {weigths_path}")
+            model.load_state_dict(torch.load(weigths_path))
             
         # Set model in evaluation mode
         model.eval()
-        test_loss = 0.0
-        correct = 0
-        total = 0
+        aggregated_loss = 0.0
+        num_correct = 0
+        num_total = 0
 
         all_preds = []
         all_labels = []
         criterion = nn.CrossEntropyLoss()
-        
+        device = self.dataset_handler.get_device()
+
         with torch.no_grad():
             for images, labels in test_loader:
+                images, labels = images.to(device, non_blocking=True), labels.to(device, non_blocking=True)
                 outputs = model(images)    
                 loss = criterion(outputs, labels)
-                test_loss += loss.item() * images.size(0)
+                aggregated_loss += loss.item() * images.size(0)
                 _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+                num_total += labels.size(0)
+                num_correct += (predicted == labels).sum().item()
                 # For confusion matrix
                 all_preds.extend(predicted.cpu().numpy())
                 all_labels.extend(labels.cpu().numpy())
-                
-        print(f"all labels: {all_labels[:10]}")
+        
+        # Calculate confusion matrix
         class_names = self.dataset_handler.get_class_names()
         cm = confusion_matrix(all_labels, all_preds, labels=range(len(class_names)))
+        
+        # Calculate precision, recall, F1 score and accuracy
         precision, recall = self._calculate_precision_recall(cm)
         f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-        print(f"F1 Score: {f1:.4f}")
-        print(f"Precision: {precision}, Recall: {recall}")
+        test_accuracy = num_correct / num_total
+        test_loss = aggregated_loss / num_total
         
-        # Generate and save confusion matrix
-        self._plot_confusion_matrix(cm, class_names)
-        
-        test_accuracy = correct / total
-        print(f"Test Loss: {test_loss / len(self.dataset_handler.test_data):.4f}, Accuracy: {100 * test_accuracy:.2f}%")
-        
-        # Save metrics
-        self._save_test_metrics(history, epoch, test_accuracy)
+        # Print metrics
+        print("\nEvaluation Results for model:")
+        print("{:<20} {:<30}".format('Metric', 'Value'))
+        print("=" * 50)
+        print("{:<20} {:<30.2f}".format('Test Accuracy (%)', test_accuracy * 100))
+        print("{:<20} {:<30.4f}".format('Test Loss', test_loss))
+        print("{:<20} {:<30.4f}".format('Precision', precision))
+        print("{:<20} {:<30.4f}".format('Recall', recall))
+        print("{:<20} {:<30.4f}".format('F1 Score', f1))
+        print("-" * 50)
         
         return {
-            'test_loss': test_loss / len(self.dataset_handler.test_data),
+            'test_loss': test_loss,
             'test_accuracy': test_accuracy,
             'precision': precision,
             'recall': recall,
@@ -111,7 +110,7 @@ class Evaluator:
             recall = tp/(tp+fn) if (tp+fn) > 0 else 0
         return precision, recall
     
-    def _plot_confusion_matrix(self, cm, class_names):
+    def plot_confusion_matrix(self, cm, class_names):
         """Plot and save confusion matrix
         Args:
             cm (numpy.ndarray): Confusion matrix as a 2D numpy array
@@ -127,16 +126,17 @@ class Evaluator:
         plt.close()
         print(f"Confusion matrix saved to {os.path.join(self.output_path, self.model_name + '_confusion_matrix.png')}")
     
-    def _save_test_metrics(self, history, epoch, test_accuracy):
-        """Save test metrics to CSV
+    def save_test_metrics(self, train_accuracy, val_accuracy, test_accuracy, prefix=""):
+        """Saves training, validation, and test accuracy metrics to a CSV file
         Args:
-            history (dict): Training history containing metrics
-            epoch (int): Epoch number for which the metrics are saved
+            train_accuracy (float): Training accuracy value
+            val_accuracy (float): Validation accuracy value
             test_accuracy (float): Test accuracy value
+            prefix (str): Optional prefix for the filename
         """
-        test_metrics = np.array([[history['accuracy'][epoch], history['val_accuracy'][epoch], test_accuracy]])
+        test_metrics = np.array([[train_accuracy, val_accuracy, test_accuracy]])
         np.savetxt(
-            os.path.join(self.output_path, self.model_name + "_best-metrics.csv"), 
+            os.path.join(self.output_path, self.model_name + "_" + prefix + "metrics.csv"),
             test_metrics, 
             delimiter=',', 
             header='best_train_accuracy,best_val_accuracy,test_accuracy', 

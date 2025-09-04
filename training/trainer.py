@@ -16,7 +16,6 @@ class Trainer:
             config (dict): Configuration dictionary containing training parameters
             dataset_handler (DatasetHandler): Instance of DatasetHandler to access data loaders
         """
-        self.patience = config["patience"]
         self.model_name = config["model_name"]
         self.output_path = os.path.join(config["output_path"], self.model_name)
         
@@ -32,7 +31,7 @@ class Trainer:
         self.best_epoch = 0
         self.last_epoch = 0
         
-    def train_model(self, model, epochs=0, learning_rate=0, weight_decay=0, phase_name='training', checkpoint_prefix='', profile=False):
+    def train_model(self, model, epochs=0, learning_rate=0, weight_decay=0, patience=0, phase_name='training', checkpoint_prefix='', profile=False):
         """
         Generic training method that can be used for both transfer learning and fine-tuning
         
@@ -64,6 +63,11 @@ class Trainer:
         
         train_loader, val_loader, _ = self.dataset_handler.get_data_loaders()
         
+        print("Train loader structure:")
+        self.dataset_handler.print_data_loader_structure(train_loader)
+        print("Validation loader structure:")
+        self.dataset_handler.print_data_loader_structure(val_loader)
+
         # Setup training components
         criterion = nn.CrossEntropyLoss()
         
@@ -116,9 +120,9 @@ class Trainer:
                 self._save_checkpoint(model, epoch, checkpoint_prefix, phase_name)
             else:
                 patience_counter += 1
-                if patience_counter >= self.patience:
+                if patience > 0 and patience_counter >= patience:
                     self.last_epoch = epoch
-                    print(f'{phase_name.title()} early stopping triggered after {self.patience} epochs without improvement')
+                    print(f'{phase_name.title()} early stopping triggered after {patience} epochs without improvement')
                     break
             self.last_epoch = epoch
             print(f'Current best {phase_name} model at epoch {self.best_epoch + 1} with validation loss {best_val_loss:.4f}')
@@ -148,8 +152,11 @@ class Trainer:
         model.train()
         running_loss = 0.0
         running_corrects = 0
-
+        device = self.dataset_handler.get_device()
+        
         for images, labels in tqdm(train_loader, desc=phase_name.title(), unit='batch'):
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
             optimizer.zero_grad()
             outputs = model(images)
             _, preds = torch.max(outputs, 1)
@@ -189,6 +196,7 @@ class Trainer:
         model.train()
         running_loss = 0.0
         running_corrects = 0
+        device = self.dataset_handler.get_device()
 
         with torch.profiler.profile(
             schedule=torch.profiler.schedule(wait=1, warmup=4, active=8, repeat=1),
@@ -200,6 +208,8 @@ class Trainer:
             with_stack=True,
         ) as prof:
             for i, (images, labels) in enumerate(tqdm(train_loader, desc=phase_name.title(), unit="batch")):
+                images = images.to(device, non_blocking=True)
+                labels = labels.to(device, non_blocking=True)
                 optimizer.zero_grad()
                 outputs = model(images)
                 _, preds = torch.max(outputs, 1)
@@ -241,9 +251,12 @@ class Trainer:
         model.eval()
         val_loss = 0.0
         val_corrects = 0
-
+        device = self.dataset_handler.get_device()
+        
         with torch.no_grad():
             for images, labels in val_loader:
+                images = images.to(device, non_blocking=True)
+                labels = labels.to(device, non_blocking=True)
                 outputs = model(images)
                 loss = criterion(outputs, labels)
                 _, preds = torch.max(outputs, 1)
@@ -282,30 +295,6 @@ class Trainer:
         torch.save(checkpoint_info, os.path.join(self.output_path, f"{checkpoint_prefix}_info.pt"))
     
     
-    def load_checkpoint(self, model, checkpoint_path=None):
-        """Load model from checkpoint
-        Args:
-            model: The model to load the state into
-            checkpoint_path (str): Path to the checkpoint file. If None, uses default path.
-        Returns:
-            bool: True if model was loaded successfully, False otherwise"""
-        if checkpoint_path is None:
-            checkpoint_path = os.path.join(self.output_path, self.model_name + ".pt")
-        
-        if os.path.exists(checkpoint_path):
-            # check if pth or pt and handle accordingly
-            if checkpoint_path.endswith('.pth'):
-                model = torch.load(checkpoint_path)
-                # model.load_state_dict(checkpoint.state_dict())
-                # model.load_state_dict(torch.load(checkpoint_path))
-            elif checkpoint_path.endswith('.pt'):
-                model.load_state_dict(torch.load(checkpoint_path))
-            print(f"Model loaded from {checkpoint_path}")
-            return True
-        else:
-            print(f"Checkpoint not found at {checkpoint_path}")
-            return False
-    
     def get_training_summary(self, phase_name="Training"):
         """Get a summary of the training results
         Args:
@@ -327,7 +316,6 @@ class Trainer:
 - Best validation accuracy: {best_val_acc:.4f}
 - Final training accuracy: {final_train_acc:.4f}
 - Final validation accuracy: {final_val_acc:.4f}
-- Early stopping patience: {self.patience}
         """
         return summary
     

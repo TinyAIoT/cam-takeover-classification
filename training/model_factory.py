@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision
+import os
 
 
 class ModelFactory:
@@ -126,22 +127,6 @@ class ModelFactory:
         Returns:
             model (torch.nn.Module): SqueezeNet 1.1 model with modified classifier
         """
-        # model = torchvision.models.squeezenet1_1(weights='DEFAULT')
-        # for param in model.parameters():
-        #     param.requires_grad = False
-        
-        # # Modify the classifier for smaller input size (96x96)
-        # # The original classifier expects 13x13 feature maps, but with 96x96 input we get 6x6
-        # # We need to adjust the adaptive pooling and final conv layer
-        # model.classifier = nn.Sequential(
-        #     nn.Dropout(p=0.5),
-        #     nn.Conv2d(512, num_classes, kernel_size=1),
-        #     nn.ReLU(inplace=True),
-        #     nn.AdaptiveAvgPool2d((1, 1))
-        # )
-
-        # model.features[0] = torch.nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1)
-
         model = torchvision.models.squeezenet1_1(weights='DEFAULT')
         model.classifier[1] = nn.Conv2d(512, num_classes, kernel_size=1)
         return model
@@ -156,6 +141,26 @@ class ModelFactory:
         model = torchvision.models.mnasnet0_5(weights='DEFAULT')
         model.classifier = nn.Linear(model.classifier[1].in_features, num_classes)
         return model
+    
+    def load_checkpoint(self, model, checkpoint_path):
+        """Load model from checkpoint
+        Args:
+            model: The model to load the state into
+            checkpoint_path (str): Path to the checkpoint file. If None, uses default path.
+        Returns:
+            bool: True if model was loaded successfully, False otherwise"""
+        if os.path.exists(checkpoint_path):
+            # check if pth or pt and handle accordingly
+            if checkpoint_path.endswith('.pth'):
+                model = torch.load(checkpoint_path)
+            elif checkpoint_path.endswith('.pt'):
+                model.load_state_dict(torch.load(checkpoint_path))
+            print(f"Model loaded from {checkpoint_path}")
+            return True
+        else:
+            print(f"Checkpoint not found at {checkpoint_path}")
+            return False
+
     
     def _convert_relu6_to_relu(self, model):
         """Convert ReLU6 layers to ReLU layers in the model

@@ -74,11 +74,13 @@ if __name__ == "__main__":
     try:
         with open(args.config, "r") as file:
             config = yaml.safe_load(file)
-            dataset_subpath=config["dataset_path"] 
+            #dataset_subpath=config["dataset_path"]
+            
             output_subpath=config["output_path"] 
-            dataset_path=os.path.join(args.working_dir,dataset_subpath)
+            dataset_subpaths=[ds["path"] for ds in config["datasets"]]
+            for ds in config["datasets"]:
+                ds["path"]=os.path.join(args.working_dir,ds["path"])
             output_path=os.path.join(args.working_dir,output_subpath)
-            config["dataset_path"]=dataset_path
             config["output_path"]=output_path
             
         
@@ -88,7 +90,7 @@ if __name__ == "__main__":
             "img_width": 224,
             "batch_size": 32,
             "patience": 5,
-            "dataset_path": "./path/to/your/dataset",
+            
             "model_name": "example_transfer_learning",
             "model_type": "squeezenet",
             "output_path": "./outputs",
