@@ -125,15 +125,15 @@ bool process_takeover_image(const dl::image::img_t* input_img) {
             return false;
         }
 
-        const auto results = run_takeover_inference(composed_img);
+        const std::vector<dl::cls::result_t> results = run_takeover_inference(composed_img);
 
         if (composed_img.data) {
             free(composed_img.data);
             composed_img.data = nullptr;
         }
 
-        uint8_t scores[1] = {
-            static_cast<uint8_t>(results[1].score * 100)
+        float scores[1] = {
+            results[1].score
         };
 
         notify_takeover_classification(scores);

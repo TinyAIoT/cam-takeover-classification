@@ -85,11 +85,12 @@ bool process_surface_image(const dl::image::img_t* input_img) {
 
     const auto results = run_surface_inference(converted_img);
 
-    uint8_t scores[4] = {
-        static_cast<uint8_t>(results[0].score * 100),
-        static_cast<uint8_t>(results[1].score * 100),
-        static_cast<uint8_t>(results[2].score * 100),
-        static_cast<uint8_t>(results[3].score * 100)
+    float scores[5] = {
+        results[0].score,
+        results[1].score,
+        results[2].score,
+        results[3].score,
+        results[4].score
     };
 
     notify_surface_classification(scores);

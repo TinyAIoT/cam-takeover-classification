@@ -78,8 +78,8 @@ const float get_distance() {
             oldVl53l8cxMin = 0.0;
         }
     }
-    uint8_t distance[1] = {
-        (uint8_t)oldVl53l8cxMin
+    float distance[1] = {
+        (float)oldVl53l8cxMin
     };
     notify_distance(distance);
 

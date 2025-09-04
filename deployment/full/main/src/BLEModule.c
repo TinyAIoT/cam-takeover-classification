@@ -133,11 +133,10 @@ void on_reset(int reason)
     MODLOG_DFLT(ERROR, "Resetting state; reason=%d\n", reason);
 }
 
-void encodeU8ArrayAsFloatBytes(const uint8_t* in, size_t n, uint8_t* out) {
+void encodeFloatArrayAsFloatBytes(const float* in, size_t n, uint8_t* out) {
     for (size_t i = 0; i < n; ++i) {
-        float f = (float)in[i];   /* e.g., 42 -> 42.0f */
         uint32_t u;
-        memcpy(&u, &f, 4);        /* safely grab the bits */
+        memcpy(&u, &(in[i]), 4);        /* safely grab the bits */
 
         /* write bytes explicitly as little-endian */
         out[4*i + 0] = (uint8_t)(u & 0xFFu);
@@ -147,16 +146,16 @@ void encodeU8ArrayAsFloatBytes(const uint8_t* in, size_t n, uint8_t* out) {
     }
 }
 
-void notify_surface_classification(uint8_t values[4])
+void notify_surface_classification(float values[5])
 {
     int rc;
 
     if (notify_state) {
         // convert to IEEE-754
-        uint8_t out[4 * 4];
-        encodeU8ArrayAsFloatBytes(values, 4, out);
+        uint8_t out[5 * 4];
+        encodeFloatArrayAsFloatBytes(values, 5, out);
 
-        struct os_mbuf *om = ble_hs_mbuf_from_flat(out, 4*4);
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(out, 5*4);
         if (om == NULL) {
             MODLOG_DFLT(ERROR, "error allocating mbuf for notification\n");
             return;
@@ -169,14 +168,14 @@ void notify_surface_classification(uint8_t values[4])
     }
 }
 
-void notify_takeover_classification(uint8_t values[1])
+void notify_takeover_classification(float values[1])
 {
     int rc;
 
     if (notify_state) {
         // convert to IEEE-754
         uint8_t out[1 * 4];
-        encodeU8ArrayAsFloatBytes(values, 1, out);
+        encodeFloatArrayAsFloatBytes(values, 1, out);
 
         struct os_mbuf *om = ble_hs_mbuf_from_flat(out, 1*4);
         if (om == NULL) {
@@ -191,14 +190,14 @@ void notify_takeover_classification(uint8_t values[1])
     }
 }
 
-void notify_distance(uint8_t values[1])
+void notify_distance(float values[1])
 {
     int rc;
 
     if (notify_state) {
         // convert to IEEE-754
         uint8_t out[1 * 4];
-        encodeU8ArrayAsFloatBytes(values, 1, out);
+        encodeFloatArrayAsFloatBytes(values, 1, out);
 
         struct os_mbuf *om = ble_hs_mbuf_from_flat(out, 1*4);
         if (om == NULL) {

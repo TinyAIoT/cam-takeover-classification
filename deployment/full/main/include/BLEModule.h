@@ -46,10 +46,10 @@ extern "C" {
     int gap_event(struct ble_gap_event *event, void *arg);
     void on_sync(void);
     void on_reset(int reason);
-    void encodeU8ArrayAsFloatBytes(const uint8_t* in, size_t n, uint8_t* out);
-    void notify_surface_classification(uint8_t values[4]);
-    void notify_takeover_classification(uint8_t values[1]);
-    void notify_distance(uint8_t values[1]);
+    void encodeFloatArrayAsFloatBytes(const float* in, size_t n, uint8_t* out);
+    void notify_surface_classification(float values[5]);
+    void notify_takeover_classification(float values[1]);
+    void notify_distance(float values[1]);
 
 #ifdef __cplusplus
 }
