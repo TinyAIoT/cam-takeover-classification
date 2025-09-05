@@ -4,23 +4,54 @@ import torchvision
 import os
 
 class ReshapeToPatches(nn.Module):
+    # (B,1,96,96) -> (B,16,24,24) where each channel is one 24x24 tile
     def forward(self, x):
-        # x: [batch, 1, 96, 96] -> [batch, 16, 24, 24]
-        return x.view(x.size(0), 16, 24, 24)
+        B, C, H, W = x.shape
+        assert C == 1 and H == 96 and W == 96, f"Got {x.shape}, expected (B,1,96,96)"
+        x = x.view(B, 1, 4, 24, 4, 24)                 # (B,1,rows,24,cols,24)
+        x = x.permute(0, 2, 4, 1, 3, 5).contiguous()   # (B,4,4,1,24,24)
+        x = x.view(B, 16, 24, 24)                      # (B,16,24,24)
+        return x
 
 class CustomSqueezeNet(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, stride1=True, remove_first_maxpool=True):
         super().__init__()
-        # Reshape input: (1, 96, 96) -> (16, 24, 24)
+
         self.reshape = ReshapeToPatches()
-        self.squeezenet = torchvision.models.squeezenet1_1(weights='DEFAULT')
-        # Replace first conv layer to accept 16 channels
-        self.squeezenet.features[0] = nn.Conv2d(16, 64, kernel_size=3, stride=2, padding=1)
-        self.squeezenet.classifier[1] = nn.Conv2d(512, num_classes, kernel_size=1)
-    
+        m = torchvision.models.squeezenet1_1(weights='DEFAULT')
+
+        # --- replace conv1 to accept 16 channels and keep a sensible init ---
+        old = m.features[0]  # Conv2d(3, 64, kernel_size=3, stride=2, padding=1)
+        new_stride = 1 if stride1 else old.stride
+        new = nn.Conv2d(
+            in_channels=16,
+            out_channels=old.out_channels,
+            kernel_size=old.kernel_size,
+            stride=new_stride,
+            padding=old.padding,
+            bias=(old.bias is not None),
+        )
+        with torch.no_grad():
+            w_mean = old.weight.mean(dim=1, keepdim=True)  # (64,1,3,3)
+            new.weight.copy_(w_mean.repeat(1, 16, 1, 1) * (3.0 / 16.0))
+            if old.bias is not None:
+                new.bias.copy_(old.bias)
+        m.features[0] = new
+
+        # --- optionally remove the first maxpool to avoid over-downsampling at 24x24 ---
+        if remove_first_maxpool:
+            # In squeezenet1_1, features[2] is MaxPool2d
+            m.features[2] = nn.Identity()
+
+        # --- set classifier for your num_classes ---
+        m.classifier[1] = nn.Conv2d(512, num_classes, kernel_size=1)
+
+        self.backbone = m
+
     def forward(self, x):
-        x = self.reshape(x)
-        x = self.squeezenet(x)
+        # x: (B,1,96,96)
+        x = self.reshape(x)        # (B,16,24,24)
+        x = self.backbone(x)       # (B,num_classes)
         return x
 
 class ModelFactory:
