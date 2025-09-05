@@ -96,12 +96,12 @@ class LearningConfigurator:
         if hasattr(model, 'module'):
             # Handle DataParallel models
             for name, param in model.module.named_parameters():
-                if name.startswith('classifier') or name.startswith('fc'):
+                if 'classifier' in name or 'fc' in name:
                     param.requires_grad = True
         else:
             # Handle regular models
             for name, param in model.named_parameters():
-                if name.startswith('classifier') or name.startswith('fc'):
+                if 'classifier' in name or 'fc' in name:
                     param.requires_grad = True
         print("Classification layer made trainable")
         

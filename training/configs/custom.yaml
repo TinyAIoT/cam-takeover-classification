@@ -14,7 +14,7 @@ datasets: # List of datasets to be used for training
       - ToTensor 
 
       # Normalization using torchvision.transforms.Normalize
-      - normalize: {mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225]}
+      - normalize: {mean: [0.485], std: [0.229]}
             # mean (sequence) – Sequence of means for each channel.
             # std (sequence) – Sequence of standard deviations for each channel.
 model_name: torch_custom
@@ -36,7 +36,7 @@ num_unfreezed_feature_layers: 15  # Unfreeze last 50 feature layers
 
 
 # Additional parameters
-# requires_grad: False # Whether to require gradients for the model parameters (make them trainable) | Defaults to False
+requires_grad: True # Whether to require gradients for the model parameters (make them trainable) | Defaults to False
 # check_corrupted_images: False # Whether to check for corrupted images in the dataset | Defaults to False
 # pin_memory - True # Whether to pin memory during data loading | Defaults to True
 # profile - False  # Whether to profile the training process (causing training to be interrupted after few steps) | Defaults to False | FOR DEBUGGING ONLY

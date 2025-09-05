@@ -3,6 +3,25 @@ import torch.nn as nn
 import torchvision
 import os
 
+class ReshapeToPatches(nn.Module):
+    def forward(self, x):
+        # x: [batch, 1, 96, 96] -> [batch, 16, 24, 24]
+        return x.view(x.size(0), 16, 24, 24)
+
+class CustomSqueezeNet(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+        # Reshape input: (1, 96, 96) -> (16, 24, 24)
+        self.reshape = ReshapeToPatches()
+        self.squeezenet = torchvision.models.squeezenet1_1(weights='DEFAULT')
+        # Replace first conv layer to accept 16 channels
+        self.squeezenet.features[0] = nn.Conv2d(16, 64, kernel_size=3, stride=2, padding=1)
+        self.squeezenet.classifier[1] = nn.Conv2d(512, num_classes, kernel_size=1)
+    
+    def forward(self, x):
+        x = self.reshape(x)
+        x = self.squeezenet(x)
+        return x
 
 class ModelFactory:
     """Factory class for creating and configuring different model architectures"""
@@ -140,18 +159,6 @@ class ModelFactory:
         Returns:
             model (torch.nn.Module): Custom model with reshape layer and modified classifier
         """
-        class CustomSqueezeNet(nn.Module):
-            def __init__(self, num_classes):
-                super().__init__()
-                # Reshape input: (3, 96, 96) -> (16, 24, 24)
-                self.prep = nn.Conv2d(3, 16, kernel_size=3, stride=4, padding=1)
-                self.squeezenet = torchvision.models.squeezenet1_1(weights='DEFAULT')
-                self.squeezenet.classifier[1] = nn.Conv2d(512, num_classes, kernel_size=1)
-            
-            def forward(self, x):
-                x = self.prep(x)
-                x = self.squeezenet(x)
-                return x
 
         model = CustomSqueezeNet(num_classes)
         return model
