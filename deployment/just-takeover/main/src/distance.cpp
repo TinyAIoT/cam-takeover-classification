@@ -5,46 +5,36 @@ static VL53L8CX sensor_vl53l8cx(&Wire, -1, -1);
 float oldVl53l8cxMin = -1.0;
 
 const bool init_distance() {
-    ESP_LOGI("DISTANCE", "start init");
     Wire.begin(PIN_QWIIC_SDA,PIN_QWIIC_SCL);
-    ESP_LOGI("DISTANCE", "a");
     vTaskDelay(500 / portTICK_PERIOD_MS);
-    ESP_LOGI("DISTANCE", "b");
     int ret = sensor_vl53l8cx.set_i2c_address(0x51); // need to change address, because default address is shared with other sensor
-    ESP_LOGI("DISTANCE", "c");
     if (ret != 0) {
         ESP_LOGE("DISTANCE", "Failed to set I2C address");
         return false;
     }
 
     Wire.setClock(1000000); // vl53l8cx can operate at 1MHz
-    ESP_LOGI("DISTANCE", "d");
     ret = sensor_vl53l8cx.begin();
-    ESP_LOGI("DISTANCE", "e");
     if (ret != 0) {
         ESP_LOGE("DISTANCE", "Failed to begin sensor");
         return false;
     }
     ret = sensor_vl53l8cx.init();
-    ESP_LOGI("DISTANCE", "f");
     if (ret != 0) {
         ESP_LOGE("DISTANCE", "Failed to init sensor");
         return false;
     }
     ret = sensor_vl53l8cx.set_ranging_frequency_hz(30);
-    ESP_LOGI("DISTANCE", "g");
     if (ret != 0) {
         ESP_LOGE("DISTANCE", "Failed to set ranging frequency");
         return false;
     }
     ret = sensor_vl53l8cx.set_resolution(VL53L8CX_RESOLUTION_8X8);
-    ESP_LOGI("DISTANCE", "h");
     if (ret != 0) {
         ESP_LOGE("DISTANCE", "Failed to set resolution");
         return false;
     }
     ret = sensor_vl53l8cx.start_ranging();
-    ESP_LOGI("DISTANCE", "i");
     if (ret != 0) {
         ESP_LOGE("DISTANCE", "Failed to start ranging");
         return false;
