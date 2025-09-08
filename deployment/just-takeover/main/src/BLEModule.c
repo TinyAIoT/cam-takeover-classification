@@ -31,7 +31,6 @@ static uint8_t addr_type;
 
 static const char *manuf_name = "senseBox Eye";
 static const char *model_num = "1.1";
-uint16_t surface_classification_hrm_handle;
 uint16_t takeover_classification_hrm_handle;
 uint16_t distance_hrm_handle;
 
@@ -40,8 +39,6 @@ static bool notify_state;
 
 static uint16_t conn_handle;
 
-static int gatt_svr_chr_access_surface_classification(uint16_t conn_handle, uint16_t attr_handle,
-                               struct ble_gatt_access_ctxt *ctxt, void *arg);
 
 static int gatt_svr_chr_access_takeover_classification(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg);
@@ -78,13 +75,13 @@ int gap_event(struct ble_gap_event *event, void *arg)
         break;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
-        // TODO: takeover?? distance??
+        // TODO: distance??
         MODLOG_DFLT(INFO, "subscribe event; cur_notify=%d\n value handle; "
                     "val_handle=%d\n",
-                    event->subscribe.cur_notify, surface_classification_hrm_handle);
-        if (event->subscribe.attr_handle == surface_classification_hrm_handle) {
+                    event->subscribe.cur_notify, takeover_classification_hrm_handle);
+        if (event->subscribe.attr_handle == takeover_classification_hrm_handle) {
             notify_state = event->subscribe.cur_notify;
-        } else if (event->subscribe.attr_handle != surface_classification_hrm_handle) {
+        } else if (event->subscribe.attr_handle != takeover_classification_hrm_handle) {
             notify_state = event->subscribe.cur_notify;
         }
         ESP_LOGI("BLE_GAP_SUBSCRIBE_EVENT", "conn_handle from subscribe=%d", conn_handle);
@@ -146,28 +143,7 @@ void encodeFloatArrayAsFloatBytes(const float* in, size_t n, uint8_t* out) {
     }
 }
 
-void notify_surface_classification(float values[5])
-{
-    int rc;
-
-    if (notify_state) {
-        // convert to IEEE-754
-        uint8_t out[5 * 4];
-        encodeFloatArrayAsFloatBytes(values, 5, out);
-
-        struct os_mbuf *om = ble_hs_mbuf_from_flat(out, 5*4);
-        if (om == NULL) {
-            MODLOG_DFLT(ERROR, "error allocating mbuf for notification\n");
-            return;
-        }
-
-        rc = ble_gattc_notify_custom(conn_handle, surface_classification_hrm_handle, om);
-        if (rc != 0) {
-            MODLOG_DFLT(ERROR, "error sending surface classification notification; rc=%d\n", rc);
-        }
-    }
-}
-
+// TODO: only when subscribed
 void notify_takeover_classification(float values[1])
 {
     int rc;
@@ -278,12 +254,6 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
         .uuid = BLE_UUID128_DECLARE(GATT_SENSORS_UUID),
         .characteristics = (struct ble_gatt_chr_def[])
         { {
-                /* Characteristic: surface classification */
-                .uuid = BLE_UUID128_DECLARE(GATT_SURFACE_CLASSIFICATION_UUID),
-                .access_cb = gatt_svr_chr_access_surface_classification,
-                .val_handle = &surface_classification_hrm_handle,
-                .flags = BLE_GATT_CHR_F_NOTIFY,
-            }, {
                 /* Characteristic: takeover classification */
                 .uuid = BLE_UUID128_DECLARE(GATT_TAKEOVER_CLASSIFICATION_UUID),
                 .access_cb = gatt_svr_chr_access_takeover_classification,
@@ -305,22 +275,6 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
         0, /* No more services */
     },
 };
-
-// TODO: what is this for?
-static int
-gatt_svr_chr_access_surface_classification(uint16_t conn_handle, uint16_t attr_handle,
-                               struct ble_gatt_access_ctxt *ctxt, void *arg)
-{
-    uint16_t uuid;
-
-    uuid = ble_uuid_u16(ctxt->chr->uuid);
-
-    MODLOG_DFLT(INFO, "What do I do with this??");
-
-
-    assert(0);
-    return BLE_ATT_ERR_UNLIKELY;
-}
 
 // TODO: what is this for?
 static int

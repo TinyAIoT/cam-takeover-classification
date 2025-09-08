@@ -1,0 +1,23 @@
+menu "TinyBirdiaryConfig"
+
+    choice MODEL
+        prompt "Select the Model you want to use"
+        help
+            Select this option to choose the Model for the example.
+
+        config MODEL_MBNV2_EQ
+            bool "MBNV2 Layerwise EQ"
+
+
+    endchoice
+    choice DATASET
+        prompt "Select the Dataset you want to use"
+        help
+            Select this option to choose the Dataset for the example.
+
+        config DATASET_BIRDIARY
+            bool "BIRDIARY"
+
+    endchoice
+
+endmenu
