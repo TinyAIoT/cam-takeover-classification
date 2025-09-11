@@ -15,6 +15,7 @@ from tqdm import tqdm
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
+from utilities.mosaic import make_mosaic_from_predictions
 
 
 
@@ -184,7 +185,8 @@ def evaluate_ppq_module_with_pv(
     img_height: int = 224,
     img_width: int = 224,
     print_confusion_matrix: bool = False,
-    confusion_matrix_path: str = "confusion_matrix.png"
+    confusion_matrix_path: str = "confusion_matrix.png",
+    mosaic_path: str = "mosaic_pred.jpg"
 ) -> pd.DataFrame:
     """
     一套用来测试 ppq 模块的逻辑，
@@ -205,7 +207,8 @@ def evaluate_ppq_module_with_pv(
         img_height=img_height,
         img_width=img_width,
         print_confusion_matrix=print_confusion_matrix,
-        confusion_matrix_path=confusion_matrix_path
+        confusion_matrix_path=confusion_matrix_path,
+        mosaic_path=mosaic_path
     )
 
 def evaluate_ppq_module_with_ants(
@@ -249,7 +252,8 @@ def _evaluate_any_module_with_pv(
     img_height: int = 224,
     img_width: int = 224,
     print_confusion_matrix: bool = False,
-    confusion_matrix_path: str = "confusion_matrix.png"
+    confusion_matrix_path: str = "confusion_matrix.png",
+    mosaic_path: str = "mosaic_pred.jpg"
 
 ):
     """
@@ -259,6 +263,7 @@ def _evaluate_any_module_with_pv(
     recorder = {"loss": [], "top1_accuracy": [], "top5_accuracy": [], "batch_time": []}
     all_preds = []
     all_labels = []
+    all_filenames = []
     
     if imagenet_validation_loader is None:
         imagenet_validation_loader = load_pv_from_directory(
@@ -267,7 +272,7 @@ def _evaluate_any_module_with_pv(
 
     loss_fn = torch.nn.CrossEntropyLoss().to("cpu")
 
-    for batch_idx, (batch_input, batch_label) in tqdm(
+    for batch_idx, (batch_input, batch_label, batch_filename) in tqdm(
         enumerate(imagenet_validation_loader),
         desc="Evaluating Model...",
         total=len(imagenet_validation_loader),
@@ -291,6 +296,7 @@ def _evaluate_any_module_with_pv(
         # Store predictions and labels for confusion matrix
         all_preds.extend(torch.argmax(batch_pred, dim=1).cpu().numpy())
         all_labels.extend(batch_label.cpu().numpy())
+        all_filenames.extend(batch_filename)
 
         if batch_idx % 100 == 0 and verbose:
             print(
@@ -305,6 +311,10 @@ def _evaluate_any_module_with_pv(
                     / len(recorder["top5_accuracy"]),
                 )
             )
+
+    print(all_preds)
+    mosaic = make_mosaic_from_predictions(all_filenames, all_preds)
+    mosaic.save(mosaic_path)
 
     if verbose:
         print(
@@ -359,7 +369,7 @@ def _evaluate_any_module_with_imagenet(
 
     loss_fn = torch.nn.CrossEntropyLoss().to("cpu")
 
-    for batch_idx, (batch_input, batch_label) in tqdm(
+    for batch_idx, (batch_input, batch_label, _) in tqdm(
         enumerate(imagenet_validation_loader),
         desc="Evaluating Model...",
         total=len(imagenet_validation_loader),

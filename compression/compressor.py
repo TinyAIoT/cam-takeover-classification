@@ -28,6 +28,7 @@ from torch.utils.data.dataset import Subset
 import argparse
 import torch.nn as nn
 import pandas as pd
+from utilities.dataloader_util import ImageFolderWithFilenameReturn
 
 def get_default_device():
     """Pick GPU if available, else CPU
@@ -219,7 +220,7 @@ if __name__ == "__main__":
         
     if os.path.exists(TEST_DIR):
         print(f"load imagenet testing dataset from directory: {TEST_DIR}")
-        test_dataset = datasets.ImageFolder(
+        test_dataset = ImageFolderWithFilenameReturn(
             TEST_DIR,
             transforms.Compose(
                 [
@@ -315,10 +316,11 @@ if __name__ == "__main__":
         batchsize=BATCH_SIZE,
         device="cuda:0",
         verbose=1,
-        print_confusion_matrix=False,
+        print_confusion_matrix=True,
         img_height=IMAGE_HEIGHT,
         img_width=IMAGE_WIDTH,
         confusion_matrix_path=config["output_path"] + config["model_name"] + "_" + str(args.opt_level) + "_" + str(args.iterations) + "_" + str(args.value_threshold) + "_confusion_matrix.png",
+        mosaic_path=config["output_path"] + config["model_name"] + "_" + str(args.opt_level) + "_" + str(args.iterations) + "_" + str(args.value_threshold) + "_mosaic_pred.jpg"
     )
 
     top1_test=sum(test["top1_accuracy"]) / len(test["top1_accuracy"])
