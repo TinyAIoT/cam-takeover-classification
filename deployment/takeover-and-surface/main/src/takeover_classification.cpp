@@ -1,7 +1,6 @@
 #include "takeover_classification.hpp"
 #include "BLEModule.h"
 
-ImageRingBuffer ring_buffer;
 extern const uint8_t espdl_takeover_model[] asm("_binary_takeover_espdl_start");
 dl::Model *takeover_model = nullptr;
 dl::image::ImagePreprocessor *m_takeover_preprocessor = nullptr;
@@ -68,7 +67,7 @@ bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t 
     return true;
 }
 
-const std::vector<dl::cls::result_t> run_takeover_inference(dl::image::img_t &input_img) {    
+std::vector<dl::cls::result_t> run_takeover_inference(const dl::image::img_t &input_img) {    
     uint32_t t0, t1;
     float delta;
     t0 = esp_timer_get_time();
@@ -82,7 +81,7 @@ const std::vector<dl::cls::result_t> run_takeover_inference(dl::image::img_t &in
 
     t1 = esp_timer_get_time();
     delta = t1 - t0;
-    printf("Inference in %8.0f us.\n", delta);
+    ESP_LOGI("TAKEOVER", "inference in %8.0f us.\n", delta);
 
     for (auto &res : results) {
         ESP_LOGI("TAKEOVER", "category: %s, score: %f\n", res.cat_name, res.score);
@@ -92,51 +91,16 @@ const std::vector<dl::cls::result_t> run_takeover_inference(dl::image::img_t &in
 }
 
 bool process_takeover_image(const dl::image::img_t* input_img) {
-    dl::image::img_t converted_img;
-    if (!convert_takeover_image(input_img, converted_img)) {
-        ESP_LOGE("TAKEOVER", "Could not convert image");
-        return false;
-    }
+    const std::vector<dl::cls::result_t> results = run_takeover_inference(*input_img);
 
-    // Add converted image to ring buffer
-    if (!ring_buffer.add_image(converted_img)) {
-        ESP_LOGE("TAKEOVER", "Could not add image to ring buffer");
-        free(converted_img.data);
-        return false;
-    }
-    
-    // Free the original converted_img.data since it's been copied to ring buffer
-    free(converted_img.data);
-    converted_img.data = nullptr;
-    
-    ESP_LOGI("TAKEOVER", "Added image to ring buffer. Count: %d/%d", 
-                ring_buffer.get_count(), RING_BUFFER_SIZE);
-
-    // Check if the ring buffer is full
-    if (!ring_buffer.is_full()) {
-        ESP_LOGI("TAKEOVER", "Ring buffer has not been filled yet.");
-        return false; // Not enough images yet
-    } else {
-        ESP_LOGI("TAKEOVER", "Ring buffer is full. Composing 4x4 image.");
-        dl::image::img_t composed_img;
-        if (!ring_buffer.compose_4x4_image(composed_img)) {
-            ESP_LOGE("TAKEOVER", "Failed to compose 4x4 image");
-            return false;
+    float scores[1] = {0};
+    for (const auto& res : results) {
+        if (strcmp(res.cat_name, "takeover") == 0) {
+            scores[0] = res.score;
         }
-
-        const std::vector<dl::cls::result_t> results = run_takeover_inference(composed_img);
-
-        if (composed_img.data) {
-            free(composed_img.data);
-            composed_img.data = nullptr;
-        }
-
-        float scores[1] = {
-            (float)(results[1].score)
-        };
-
-        notify_takeover_classification(scores);
     }
+
+    notify_takeover_classification(scores);
 
     return true;
 }

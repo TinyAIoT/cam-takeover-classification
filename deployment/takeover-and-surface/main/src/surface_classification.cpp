@@ -52,7 +52,7 @@ bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &
     return true;
 }
 
-const std::vector<dl::cls::result_t> run_surface_inference(dl::image::img_t &input_img) {
+std::vector<dl::cls::result_t> run_surface_inference(const dl::image::img_t &input_img) {
     uint32_t t0, t1;
     float delta;
     t0 = esp_timer_get_time();
@@ -66,7 +66,7 @@ const std::vector<dl::cls::result_t> run_surface_inference(dl::image::img_t &inp
 
     t1 = esp_timer_get_time();
     delta = t1 - t0;
-    printf("Inference in %8.0f us.\n", delta);
+    ESP_LOGI("SURFACE", "inference in %8.0f us.\n", delta);
 
     for (auto &res : results) {
         ESP_LOGI("SURFACE", "category: %s, score: %f\n", res.cat_name, res.score);
@@ -76,27 +76,24 @@ const std::vector<dl::cls::result_t> run_surface_inference(dl::image::img_t &inp
 }
 
 bool process_surface_image(const dl::image::img_t* input_img) {
-    dl::image::img_t converted_img;
-    if (!convert_surface_image(input_img, converted_img)) {
-        ESP_LOGE("SURFACE", "Could not convert image");
-        return false;
+    const auto results = run_surface_inference(*input_img);
+
+    float scores[5] = {0};
+    // Map category names to their index in the scores array
+    for (const auto& res : results) {
+        if (strcmp(res.cat_name, "asphalt") == 0) {
+            scores[0] = res.score;
+        } else if (strcmp(res.cat_name, "paving_stones") == 0) {
+            scores[2] = res.score;
+        } else if (strcmp(res.cat_name, "sett") == 0) {
+            scores[3] = res.score;
+        } else if (strcmp(res.cat_name, "unpaved") == 0) {
+            scores[4] = res.score;
+        }
+        // scores[1] remains 0 for 'compacted' placeholder
     }
-
-    const auto results = run_surface_inference(converted_img);
-
-    float scores[5] = {
-        results[0].score,
-        results[3].score,
-        results[1].score,
-        results[2].score,
-        (float)0.0f // placeholder for standing
-    };
 
     notify_surface_classification(scores);
     
-    // Free the original converted_img.data since it's been copied to ring buffer
-    free(converted_img.data);
-    converted_img.data = nullptr;
-
     return true;
 }
