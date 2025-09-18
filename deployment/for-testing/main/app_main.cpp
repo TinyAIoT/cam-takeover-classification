@@ -36,11 +36,77 @@
 extern const uint8_t example_jpg_start[] asm("_binary_example_jpg_start");
 extern const uint8_t example_jpg_end[] asm("_binary_example_jpg_end");
 extern const uint8_t espdl_model[] asm("_binary_squeezenet_espdl_start");
+static const char *model_path = (const char *)espdl_model;
 
 // Set to true to take a camera picture, else make sure to add an img
 #define TAKE_PICTURE false
-#define ESP_CAMERA_SUPPORTED true
 #define SAVE_TO_SDCARD true
+
+
+static const dl::cls::result_t run_inference(dl::image::img_t &input_img) {
+    char dir[64];
+    snprintf(dir, sizeof(dir), "%s/espdl_models", CONFIG_BSP_SD_MOUNT_POINT);
+    
+    dl::Model *model = nullptr;
+    dl::image::ImagePreprocessor *m_image_preprocessor = nullptr;
+    
+    model = new dl::Model(model_path, dir, static_cast<fbs::model_location_type_t>(0));
+    if (!model) {
+        ESP_LOGE("MODEL", "Failed to create model");
+        return {};
+    }
+    model->minimize();
+    // ESP_ERROR_CHECK(model->test());
+    
+    // Add a small delay to ensure model is properly initialized
+    vTaskDelay(pdMS_TO_TICKS(10));
+    
+    uint32_t t0, t1;
+    float delta;
+    t0 = esp_timer_get_time();
+    m_image_preprocessor = new dl::image::ImagePreprocessor(model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375}, DL_IMAGE_CAP_RGB565_BIG_ENDIAN);
+    if (!m_image_preprocessor) {
+        ESP_LOGE("PREPROCESSOR", "Failed to create image preprocessor");
+        delete model;
+        return {};
+    }
+    
+    m_image_preprocessor->preprocess(input_img);
+
+    model->run(dl::RUNTIME_MODE_MULTI_CORE);
+    const int check = 5;
+    ClassificationPostProcessor m_postprocessor(model, check, std::numeric_limits<float>::lowest(), true);
+    std::vector<dl::cls::result_t> &results = m_postprocessor.postprocess();
+
+    t1 = esp_timer_get_time();
+    delta = t1 - t0;
+    printf("Inference in %8.0f us.\n", delta);
+
+    dl::cls::result_t best_result = {};
+    bool found_result = false;
+
+    for (auto &res : results) {
+        ESP_LOGI("CLS", "category: %s, score: %f\n", res.cat_name, res.score);
+        if (!found_result || res.score > best_result.score)
+        {
+            best_result = res;  // Copy the result
+            found_result = true;
+        }
+    }
+    
+    // Free resources
+    if (m_image_preprocessor) {
+        delete m_image_preprocessor;
+        m_image_preprocessor = nullptr;
+    }
+    if (model) {
+        delete model;
+        model = nullptr;
+    }
+
+    return best_result;
+}
+
 
 #if SAVE_TO_SDCARD
 #include "sd_pins.h"
@@ -273,332 +339,6 @@ jpeg_error_t encode_img_to_jpeg(dl::image::img_t *img, dl::image::jpeg_img_t *jp
     jpeg_enc_close(jpeg_enc);
     return ret;
 }
-#endif // SAVE_TO_SDCARD
-
-#if TAKE_PICTURE && ESP_CAMERA_SUPPORTED
-#include "camera_pins.h"
-
-
-// Ring buffer for converted images
-#define RING_BUFFER_SIZE 16
-struct ImageRingBuffer {
-    dl::image::img_t images[RING_BUFFER_SIZE];
-    int write_index;
-    int count;
-    
-    ImageRingBuffer() : write_index(0), count(0) {
-        // Initialize all images
-        for (int i = 0; i < RING_BUFFER_SIZE; i++) {
-            images[i].data = nullptr;
-            images[i].height = 0;
-            images[i].width = 0;
-            images[i].pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-        }
-    }
-    
-    ~ImageRingBuffer() {
-        // Free all allocated memory
-        for (int i = 0; i < RING_BUFFER_SIZE; i++) {
-            if (images[i].data) {
-                free(images[i].data);
-                images[i].data = nullptr;
-            }
-        }
-    }
-    
-    bool add_image(const dl::image::img_t& img) {
-        // Free existing data at this position if any
-        if (images[write_index].data) {
-            free(images[write_index].data);
-        }
-        
-        // Allocate new memory and copy image data
-        size_t data_size = img.height * img.width * 3; // RGB888: 3 bytes per pixel
-        images[write_index].data = malloc(data_size);
-        if (!images[write_index].data) {
-            ESP_LOGE("RING_BUFFER", "Memory allocation failed for ring buffer");
-            return false;
-        }
-        
-        memcpy(images[write_index].data, img.data, data_size);
-        images[write_index].height = img.height;
-        images[write_index].width = img.width;
-        images[write_index].pix_type = img.pix_type;
-        
-        write_index = (write_index + 1) % RING_BUFFER_SIZE;
-        if (count < RING_BUFFER_SIZE) {
-            count++;
-        }
-        
-        return true;
-    }
-    
-    bool is_full() const {
-        return count == RING_BUFFER_SIZE;
-    }
-    
-    int get_count() const {
-        return count;
-    }
-    
-    const dl::image::img_t* get_image(int index) const {
-        if (index >= count) {
-            return nullptr;
-        }
-        int actual_index = (write_index - count + index + RING_BUFFER_SIZE) % RING_BUFFER_SIZE;
-        return &images[actual_index];
-    }
-    
-    bool compose_4x4_image(dl::image::img_t& output_img) {
-        if (!is_full()) {
-            ESP_LOGE("RING_BUFFER", "Cannot compose 4x4 image - buffer not full");
-            return false;
-        }
-        
-        // Assuming all images are 24x24 (from convert_takeover_image)
-        const int single_img_size = 24;
-        const int grid_size = 4;
-        const int composed_width = single_img_size * grid_size;  // 96
-        const int composed_height = single_img_size * grid_size; // 96
-        
-        output_img.width = composed_width;
-        output_img.height = composed_height;
-        output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-        
-        size_t total_size = composed_width * composed_height * 3; // RGB888: 3 bytes per pixel
-        output_img.data = malloc(total_size);
-        if (!output_img.data) {
-            ESP_LOGE("RING_BUFFER", "Memory allocation failed for composed image");
-            return false;
-        }
-        
-        // Copy each image to its position in the 4x4 grid
-        for (int i = 0; i < RING_BUFFER_SIZE; i++) {
-            const dl::image::img_t* src_img = get_image(i);
-            if (!src_img || !src_img->data) {
-                ESP_LOGE("RING_BUFFER", "Invalid image at index %d", i);
-                free(output_img.data);
-                return false;
-            }
-            
-            // Calculate grid position (row, col)
-            int row = i / grid_size;
-            int col = i % grid_size;
-            
-            // Calculate pixel offsets in the composed image
-            int dst_x_start = col * single_img_size;
-            int dst_y_start = row * single_img_size;
-            
-            // Copy pixel by pixel (or row by row for efficiency)
-            for (int y = 0; y < single_img_size; y++) {
-                for (int x = 0; x < single_img_size; x++) {
-                    // Source pixel position
-                    int src_offset = (y * single_img_size + x) * 3;
-                    
-                    // Destination pixel position in composed image
-                    int dst_y = dst_y_start + y;
-                    int dst_x = dst_x_start + x;
-                    int dst_offset = (dst_y * composed_width + dst_x) * 3;
-                    
-                    // Copy RGB values
-                    uint8_t* src_data = (uint8_t*)src_img->data;
-                    uint8_t* dst_data = (uint8_t*)output_img.data;
-                    
-                    dst_data[dst_offset] = src_data[src_offset];         // R
-                    dst_data[dst_offset + 1] = src_data[src_offset + 1]; // G
-                    dst_data[dst_offset + 2] = src_data[src_offset + 2]; // B
-                }
-            }
-        }
-        
-        ESP_LOGI("RING_BUFFER", "Composed 4x4 image (%dx%d) from ring buffer", 
-                 composed_width, composed_height);
-        return true;
-    }
-};
-
-// Camera Module pin mapping
-static camera_config_t camera_config = {
-    .pin_pwdn = PWDN_GPIO_NUM,
-    .pin_reset = RESET_GPIO_NUM,
-    .pin_xclk = XCLK_GPIO_NUM,
-    .pin_sscb_sda = SIOD_GPIO_NUM,
-    .pin_sscb_scl = SIOC_GPIO_NUM,
-
-    .pin_d7 = Y9_GPIO_NUM,
-    .pin_d6 = Y8_GPIO_NUM,
-    .pin_d5 = Y7_GPIO_NUM,
-    .pin_d4 = Y6_GPIO_NUM,
-    .pin_d3 = Y5_GPIO_NUM,
-    .pin_d2 = Y4_GPIO_NUM,
-    .pin_d1 = Y3_GPIO_NUM,
-    .pin_d0 = Y2_GPIO_NUM,
-
-    .pin_vsync = VSYNC_GPIO_NUM,
-    .pin_href = HREF_GPIO_NUM,
-    .pin_pclk = PCLK_GPIO_NUM,
-
-    .xclk_freq_hz = 20000000, // XCLK 20MHz or 10MHz for OV2640 double FPS (Experimental)
-    .ledc_timer = LEDC_TIMER_0,
-    .ledc_channel = LEDC_CHANNEL_0,
-
-    .pixel_format = PIXFORMAT_RGB565, // PIXFORMAT_RGB565 , PIXFORMAT_JPEG
-    .frame_size = FRAMESIZE_QVGA,     // [<<320x240>> (QVGA, 4:3);FRAMESIZE_320X320, 240x176 (HQVGA, 15:11); 400x296 (CIF, 50:37)],FRAMESIZE_QVGA,FRAMESIZE_VGA
-
-    .jpeg_quality = 8, // 0-63 lower number means higher quality.  Reduce quality if stack overflow in cam_task
-    .fb_count = 2,     // if more than one, i2s runs in continuous mode. Use only with JPEG
-    .fb_location = CAMERA_FB_IN_PSRAM,
-    .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
-    .sccb_i2c_port = 0 // optional
-};
-
-static esp_err_t init_camera(void) {
-    // Initialize the camera
-    esp_err_t err = esp_camera_init(&camera_config);
-    if (err != ESP_OK) {
-        ESP_LOGE("CAM", "Camera Init Failed");
-    }
-    return err;
-}
-
-static bool capture_image(dl::image::img_t &output_img) {
-    ESP_LOGI("CAM", "Taking picture...");
-    camera_fb_t *pic = esp_camera_fb_get();
-    if (!pic) {
-        ESP_LOGE("CAM", "Failed to capture image");
-        return false;
-    }
-
-    // Use pic->buf to access the image
-    ESP_LOGI("CAM", "Picture taken! Its size was: %zu bytes", pic->len);
-    ESP_LOGW("image_dim", "Height: %d, Width: %d, Len: %zu", pic->height, pic->width, pic->len);
-
-    // Allocate memory and copy the image data before returning the frame buffer
-    output_img.height = pic->height;
-    output_img.width = pic->width;
-    output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB565;
-    
-    // Allocate memory for the image data
-    output_img.data = malloc(pic->len);
-    if (!output_img.data) {
-        ESP_LOGE("CAM", "Failed to allocate memory for image data");
-        esp_camera_fb_return(pic);
-        return false;
-    }
-    
-    // Copy the image data
-    memcpy(output_img.data, pic->buf, pic->len);
-
-    esp_camera_fb_return(pic);
-    return true;
-}
-
-static bool convert_takeover_image(dl::image::img_t &input_img, dl::image::img_t &output_img) {
-    // original height and width
-    int orig_height = input_img.height;
-    int orig_width = input_img.width;
-
-    // crop to square
-    int x_min = orig_width-orig_height;
-    int x_max = orig_width;
-    int y_min = 0;
-    int y_max = orig_height;
-    std::vector<int> crop_area = {x_min, y_min, x_max, y_max};
-
-    dl::image::img_t cropped_img;
-    cropped_img.height = y_max-y_min;
-    cropped_img.width = x_max-x_min;
-    cropped_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-    cropped_img.data = malloc(cropped_img.height * cropped_img.width * 3); // RGB888: 3 bytes per pixel
-
-    if (!cropped_img.data) {
-        ESP_LOGE("MEM", "Memory allocation failed");
-        free(cropped_img.data);
-        return false;
-    }
-
-    // Convert using ESP-DL
-    dl::image::convert_img(input_img, cropped_img, 0, nullptr, crop_area);
-
-    // rescale to 24x24
-    int target_w = 24;
-    int target_h = 24;
-
-    output_img.height = target_h;
-    output_img.width = target_w;
-    output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-    output_img.data = malloc(target_h * target_w * 3); // RGB888: 3 bytes per pixel
-
-    // Convert using ESP-DL
-    dl::image::resize(cropped_img, output_img, dl::image::DL_IMAGE_INTERPOLATE_BILINEAR);
-
-    free(cropped_img.data);
-
-    return true;
-}
-#endif // TAKE_PICTURE && ESP_CAMERA_SUPPORTED
-
-static const dl::cls::result_t run_inference(dl::image::img_t &input_img) {
-    char dir[64];
-    snprintf(dir, sizeof(dir), "%s/espdl_models", CONFIG_BSP_SD_MOUNT_POINT);
-    
-    dl::Model *model = nullptr;
-    dl::image::ImagePreprocessor *m_image_preprocessor = nullptr;
-    
-    model = new dl::Model((const char *)espdl_model, dir);
-    if (!model) {
-        ESP_LOGE("MODEL", "Failed to create model");
-        return {};
-    }
-    
-    // Add a small delay to ensure model is properly initialized
-    vTaskDelay(pdMS_TO_TICKS(100));
-    
-    uint32_t t0, t1;
-    float delta;
-    t0 = esp_timer_get_time();
-    m_image_preprocessor = new dl::image::ImagePreprocessor(model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
-    if (!m_image_preprocessor) {
-        ESP_LOGE("PREPROCESSOR", "Failed to create image preprocessor");
-        delete model;
-        return {};
-    }
-    
-    m_image_preprocessor->preprocess(input_img);
-
-    model->run(dl::RUNTIME_MODE_MULTI_CORE);
-    const int check = 5;
-    ClassificationPostProcessor m_postprocessor(model, check, std::numeric_limits<float>::lowest(), true);
-    std::vector<dl::cls::result_t> &results = m_postprocessor.postprocess();
-
-    t1 = esp_timer_get_time();
-    delta = t1 - t0;
-    printf("Inference in %8.0f us.\n", delta);
-
-    dl::cls::result_t best_result = {};
-    bool found_result = false;
-
-    for (auto &res : results) {
-        ESP_LOGI("CLS", "category: %s, score: %f\n", res.cat_name, res.score);
-        if (!found_result || res.score > best_result.score)
-        {
-            best_result = res;  // Copy the result
-            found_result = true;
-        }
-    }
-    
-    // Free resources
-    if (m_image_preprocessor) {
-        delete m_image_preprocessor;
-        m_image_preprocessor = nullptr;
-    }
-    if (model) {
-        delete model;
-        model = nullptr;
-    }
-
-    return best_result;
-}
 
 // Returns a pointer to a static array of counts for each class
 static std::vector<int> predict_sd_card_folder(const char* folder_path, const char* output_folder_path) {
@@ -607,6 +347,7 @@ static std::vector<int> predict_sd_card_folder(const char* folder_path, const ch
     DIR *dir = opendir(folder_path);
     struct dirent *entry;
     while ((entry = readdir(dir)) != nullptr) {
+        ESP_LOGI("HEAP", "Free heap at loop start: %lu bytes", esp_get_free_heap_size());
         // Skip current and parent directory entries
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
@@ -677,8 +418,8 @@ static std::vector<int> predict_sd_card_folder(const char* folder_path, const ch
         // Create JPEG structure
         dl::image::jpeg_img_t jpeg_img;
         jpeg_img.data = jpeg_data;
-        jpeg_img.width = 96; // Width will be set after decoding
-        jpeg_img.height = 96; // Height will be set after decoding
+        jpeg_img.width = 96;
+        jpeg_img.height = 96;
         jpeg_img.data_size = file_size;
         
         // Convert JPEG to RGB888
@@ -837,6 +578,269 @@ static std::vector<int> predict_sd_card_folder(const char* folder_path, const ch
     return class_counts;
 }
 
+#endif // SAVE_TO_SDCARD
+
+#if TAKE_PICTURE
+// Ring buffer for converted images
+#define RING_BUFFER_SIZE 16
+struct ImageRingBuffer {
+    dl::image::img_t images[RING_BUFFER_SIZE];
+    int write_index;
+    int count;
+    
+    ImageRingBuffer() : write_index(0), count(0) {
+        // Initialize all images
+        for (int i = 0; i < RING_BUFFER_SIZE; i++) {
+            images[i].data = nullptr;
+            images[i].height = 0;
+            images[i].width = 0;
+            images[i].pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
+        }
+    }
+    
+    ~ImageRingBuffer() {
+        // Free all allocated memory
+        for (int i = 0; i < RING_BUFFER_SIZE; i++) {
+            if (images[i].data) {
+                free(images[i].data);
+                images[i].data = nullptr;
+            }
+        }
+    }
+    
+    bool add_image(const dl::image::img_t& img) {
+        // Free existing data at this position if any
+        if (images[write_index].data) {
+            free(images[write_index].data);
+        }
+        
+        // Allocate new memory and copy image data
+        size_t data_size = img.height * img.width * 3; // RGB888: 3 bytes per pixel
+        images[write_index].data = malloc(data_size);
+        if (!images[write_index].data) {
+            ESP_LOGE("RING_BUFFER", "Memory allocation failed for ring buffer");
+            return false;
+        }
+        
+        memcpy(images[write_index].data, img.data, data_size);
+        images[write_index].height = img.height;
+        images[write_index].width = img.width;
+        images[write_index].pix_type = img.pix_type;
+        
+        write_index = (write_index + 1) % RING_BUFFER_SIZE;
+        if (count < RING_BUFFER_SIZE) {
+            count++;
+        }
+        
+        return true;
+    }
+    
+    bool is_full() const {
+        return count == RING_BUFFER_SIZE;
+    }
+    
+    int get_count() const {
+        return count;
+    }
+    
+    const dl::image::img_t* get_image(int index) const {
+        if (index >= count) {
+            return nullptr;
+        }
+        int actual_index = (write_index - count + index + RING_BUFFER_SIZE) % RING_BUFFER_SIZE;
+        return &images[actual_index];
+    }
+    
+    bool compose_4x4_image(dl::image::img_t& output_img) {
+        if (!is_full()) {
+            ESP_LOGE("RING_BUFFER", "Cannot compose 4x4 image - buffer not full");
+            return false;
+        }
+        
+        // Assuming all images are 24x24 (from convert_takeover_image)
+        const int single_img_size = 24;
+        const int grid_size = 4;
+        const int composed_width = single_img_size * grid_size;  // 96
+        const int composed_height = single_img_size * grid_size; // 96
+        
+        output_img.width = composed_width;
+        output_img.height = composed_height;
+        output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
+        
+        size_t total_size = composed_width * composed_height * 3; // RGB888: 3 bytes per pixel
+        output_img.data = malloc(total_size);
+        if (!output_img.data) {
+            ESP_LOGE("RING_BUFFER", "Memory allocation failed for composed image");
+            return false;
+        }
+        
+        // Copy each image to its position in the 4x4 grid
+        for (int i = 0; i < RING_BUFFER_SIZE; i++) {
+            const dl::image::img_t* src_img = get_image(i);
+            if (!src_img || !src_img->data) {
+                ESP_LOGE("RING_BUFFER", "Invalid image at index %d", i);
+                free(output_img.data);
+                return false;
+            }
+            
+            // Calculate grid position (row, col)
+            int row = i / grid_size;
+            int col = i % grid_size;
+            
+            // Calculate pixel offsets in the composed image
+            int dst_x_start = col * single_img_size;
+            int dst_y_start = row * single_img_size;
+            
+            // Copy pixel by pixel (or row by row for efficiency)
+            for (int y = 0; y < single_img_size; y++) {
+                for (int x = 0; x < single_img_size; x++) {
+                    // Source pixel position
+                    int src_offset = (y * single_img_size + x) * 3;
+                    
+                    // Destination pixel position in composed image
+                    int dst_y = dst_y_start + y;
+                    int dst_x = dst_x_start + x;
+                    int dst_offset = (dst_y * composed_width + dst_x) * 3;
+                    
+                    // Copy RGB values
+                    uint8_t* src_data = (uint8_t*)src_img->data;
+                    uint8_t* dst_data = (uint8_t*)output_img.data;
+                    
+                    dst_data[dst_offset] = src_data[src_offset];         // R
+                    dst_data[dst_offset + 1] = src_data[src_offset + 1]; // G
+                    dst_data[dst_offset + 2] = src_data[src_offset + 2]; // B
+                }
+            }
+        }
+        
+        ESP_LOGI("RING_BUFFER", "Composed 4x4 image (%dx%d) from ring buffer", 
+                 composed_width, composed_height);
+        return true;
+    }
+};
+
+static bool convert_takeover_image(dl::image::img_t &input_img, dl::image::img_t &output_img) {
+    // original height and width
+    int orig_height = input_img.height;
+    int orig_width = input_img.width;
+
+    // crop to square
+    int x_min = orig_width-orig_height;
+    int x_max = orig_width;
+    int y_min = 0;
+    int y_max = orig_height;
+    std::vector<int> crop_area = {x_min, y_min, x_max, y_max};
+
+    dl::image::img_t cropped_img;
+    cropped_img.height = y_max-y_min;
+    cropped_img.width = x_max-x_min;
+    cropped_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
+    cropped_img.data = malloc(cropped_img.height * cropped_img.width * 3); // RGB888: 3 bytes per pixel
+
+    if (!cropped_img.data) {
+        ESP_LOGE("MEM", "Memory allocation failed");
+        free(cropped_img.data);
+        return false;
+    }
+
+    // Convert using ESP-DL
+    dl::image::convert_img(input_img, cropped_img, 0, nullptr, crop_area);
+
+    // rescale to 24x24
+    int target_w = 24;
+    int target_h = 24;
+
+    output_img.height = target_h;
+    output_img.width = target_w;
+    output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
+    output_img.data = malloc(target_h * target_w * 3); // RGB888: 3 bytes per pixel
+
+    // Convert using ESP-DL
+    dl::image::resize(cropped_img, output_img, dl::image::DL_IMAGE_INTERPOLATE_BILINEAR);
+
+    free(cropped_img.data);
+
+    return true;
+}
+
+#include "camera_pins.h"
+
+// Camera Module pin mapping
+static camera_config_t camera_config = {
+    .pin_pwdn = PWDN_GPIO_NUM,
+    .pin_reset = RESET_GPIO_NUM,
+    .pin_xclk = XCLK_GPIO_NUM,
+    .pin_sscb_sda = SIOD_GPIO_NUM,
+    .pin_sscb_scl = SIOC_GPIO_NUM,
+
+    .pin_d7 = Y9_GPIO_NUM,
+    .pin_d6 = Y8_GPIO_NUM,
+    .pin_d5 = Y7_GPIO_NUM,
+    .pin_d4 = Y6_GPIO_NUM,
+    .pin_d3 = Y5_GPIO_NUM,
+    .pin_d2 = Y4_GPIO_NUM,
+    .pin_d1 = Y3_GPIO_NUM,
+    .pin_d0 = Y2_GPIO_NUM,
+
+    .pin_vsync = VSYNC_GPIO_NUM,
+    .pin_href = HREF_GPIO_NUM,
+    .pin_pclk = PCLK_GPIO_NUM,
+
+    .xclk_freq_hz = 20000000, // XCLK 20MHz or 10MHz for OV2640 double FPS (Experimental)
+    .ledc_timer = LEDC_TIMER_0,
+    .ledc_channel = LEDC_CHANNEL_0,
+
+    .pixel_format = PIXFORMAT_RGB565, // PIXFORMAT_RGB565 , PIXFORMAT_JPEG
+    .frame_size = FRAMESIZE_QVGA,     // [<<320x240>> (QVGA, 4:3);FRAMESIZE_320X320, 240x176 (HQVGA, 15:11); 400x296 (CIF, 50:37)],FRAMESIZE_QVGA,FRAMESIZE_VGA
+
+    .jpeg_quality = 8, // 0-63 lower number means higher quality.  Reduce quality if stack overflow in cam_task
+    .fb_count = 2,     // if more than one, i2s runs in continuous mode. Use only with JPEG
+    .fb_location = CAMERA_FB_IN_PSRAM,
+    .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
+    .sccb_i2c_port = 0 // optional
+};
+
+static esp_err_t init_camera(void) {
+    // Initialize the camera
+    esp_err_t err = esp_camera_init(&camera_config);
+    if (err != ESP_OK) {
+        ESP_LOGE("CAM", "Camera Init Failed");
+    }
+    return err;
+}
+
+static bool capture_image(dl::image::img_t &output_img) {
+    ESP_LOGI("CAM", "Taking picture...");
+    camera_fb_t *pic = esp_camera_fb_get();
+    if (!pic) {
+        ESP_LOGE("CAM", "Failed to capture image");
+        return false;
+    }
+
+    // Use pic->buf to access the image
+    ESP_LOGI("CAM", "Picture taken! Its size was: %zu bytes", pic->len);
+    ESP_LOGW("image_dim", "Height: %d, Width: %d, Len: %zu", pic->height, pic->width, pic->len);
+
+    // Allocate memory and copy the image data before returning the frame buffer
+    output_img.height = pic->height;
+    output_img.width = pic->width;
+    output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB565;
+    
+    // Allocate memory for the image data
+    output_img.data = malloc(pic->len);
+    if (!output_img.data) {
+        ESP_LOGE("CAM", "Failed to allocate memory for image data");
+        esp_camera_fb_return(pic);
+        return false;
+    }
+    
+    // Copy the image data
+    memcpy(output_img.data, pic->buf, pic->len);
+
+    esp_camera_fb_return(pic);
+    return true;
+}
+#endif // TAKE_PICTURE
 
 extern "C" void app_main(void) {
 #if SAVE_TO_SDCARD
@@ -846,7 +850,7 @@ extern "C" void app_main(void) {
     vTaskDelay(pdMS_TO_TICKS(1000));
 #endif
 
-#if TAKE_PICTURE && ESP_CAMERA_SUPPORTED
+#if TAKE_PICTURE
     ImageRingBuffer ring_buffer;
     if (ESP_OK != init_camera())
     {
@@ -1019,7 +1023,7 @@ extern "C" void app_main(void) {
             for (int i = 0; i < num_classes; ++i) fprintf(cm_file, "%12s", classification_cat_names[i]);
             fprintf(cm_file, "\n");
             for (int i = 0; i < num_classes; ++i) {
-                fprintf(cm_file, "Actual %10s", classification_cat_names[i]);
+                fprintf(cm_file, "Actual %13s", classification_cat_names[i]);
                 for (int j = 0; j < num_classes; ++j) {
                     fprintf(cm_file, "%12d", confusion_matrix[i][j]);
                 }
