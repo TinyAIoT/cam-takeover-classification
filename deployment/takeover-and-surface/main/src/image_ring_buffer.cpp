@@ -74,7 +74,7 @@ dl::image::img_t* ImageRingBuffer::get_image(int index) {
     return &images_[actual_index];
 }
 
-bool ImageRingBuffer::compose_4x4_image(dl::image::img_t& output_img) {
+bool ImageRingBuffer::compose_4x4_image(dl::image::img_t& output_img, dl::image::pix_type_t pix_type) {
     if (!is_full()) {
         ESP_LOGE("RING_BUFFER", "Cannot compose 4x4 image - buffer not full");
         return false;
@@ -83,14 +83,17 @@ bool ImageRingBuffer::compose_4x4_image(dl::image::img_t& output_img) {
     // Assuming all images are 24x24
     const int single_img_size = 24;
     const int grid_size = 4;
-    const int composed_width = single_img_size * grid_size;  // 96
-    const int composed_height = single_img_size * grid_size; // 96
+    const int composed_width = single_img_size * 16;  // 96
+    const int composed_height = single_img_size * 1; // 96
 
     output_img.width = composed_width;
     output_img.height = composed_height;
-    output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-    
+    output_img.pix_type = pix_type;
+
     size_t total_size = composed_width * composed_height * 3; // RGB888: 3 bytes per pixel
+    if (pix_type == dl::image::DL_IMAGE_PIX_TYPE_GRAY) {
+        total_size = composed_width * composed_height; // Gray: 1 byte per pixel
+    } 
     output_img.data = malloc(total_size);
 
     if (!output_img.data) {
@@ -104,12 +107,15 @@ bool ImageRingBuffer::compose_4x4_image(dl::image::img_t& output_img) {
         if (!src_img || !src_img->data) {
             ESP_LOGE("RING_BUFFER", "Invalid image at index %d", i);
             free(output_img.data);
+            output_img.data = nullptr;
             return false;
         }
         
         // Calculate grid position (row, col)
-        int row = i / grid_size;
-        int col = i % grid_size;
+        int row = 0;
+        int col = i;
+        // int row = i / grid_size;
+        // int col = i % grid_size;
         
         // Calculate pixel offsets in the composed image
         int dst_x_start = col * single_img_size;
@@ -119,25 +125,33 @@ bool ImageRingBuffer::compose_4x4_image(dl::image::img_t& output_img) {
         for (int y = 0; y < single_img_size; y++) {
             for (int x = 0; x < single_img_size; x++) {
                 // Source pixel position
-                int src_offset = (y * single_img_size + x) * 3;
+                int src_offset = (y * single_img_size + x);
                 
                 // Destination pixel position in composed image
                 int dst_y = dst_y_start + y;
                 int dst_x = dst_x_start + x;
-                int dst_offset = (dst_y * composed_width + dst_x) * 3;
+                int dst_offset = (dst_y * composed_width + dst_x);
                 
                 // Copy RGB values
                 uint8_t* src_data = (uint8_t*)src_img->data;
                 uint8_t* dst_data = (uint8_t*)output_img.data;
                 
                 dst_data[dst_offset] = src_data[src_offset];         // R
-                dst_data[dst_offset + 1] = src_data[src_offset + 1]; // G
-                dst_data[dst_offset + 2] = src_data[src_offset + 2]; // B
+                // dst_data[dst_offset + 1] = src_data[src_offset + 1]; // G
+                // dst_data[dst_offset + 2] = src_data[src_offset + 2]; // B
             }
         }
     }
     
     ESP_LOGI("RING_BUFFER", "Composed 4x4 image (%dx%d) from ring buffer", 
                 composed_width, composed_height);
+    
+    int channels = 0;
+    switch (output_img.pix_type) {
+        case dl::image::DL_IMAGE_PIX_TYPE_GRAY: channels = 1; break;
+        case dl::image::DL_IMAGE_PIX_TYPE_RGB888:   channels = 3; break;
+        default: channels = -1; break; // fallback for unknown types
+    }
+    ESP_LOGI("RING_BUFFER", "output_img channels: %d", channels);
     return true;
 }

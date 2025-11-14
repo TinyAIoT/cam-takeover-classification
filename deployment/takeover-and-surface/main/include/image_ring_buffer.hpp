@@ -22,7 +22,7 @@ public:
 
     dl::image::img_t* get_image(int index);
 
-    bool compose_4x4_image(dl::image::img_t& output_img);
+    bool compose_4x4_image(dl::image::img_t& output_img, dl::image::pix_type_t pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888);
 
 private:
     std::vector<std::vector<uint8_t>> buffer_;

@@ -4,6 +4,7 @@
 extern const uint8_t espdl_takeover_model[] asm("_binary_takeover_espdl_start");
 dl::Model *takeover_model = nullptr;
 dl::image::ImagePreprocessor *m_takeover_preprocessor = nullptr;
+dl::image::ImageTransformer takeoverTransformer;
 
 bool initialize_takeover_model() {    
     takeover_model = new dl::Model((const char *)espdl_takeover_model);
@@ -12,18 +13,29 @@ bool initialize_takeover_model() {
         return false;
     }
 
-    m_takeover_preprocessor = new dl::image::ImagePreprocessor(takeover_model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
+    if (takeover_model->get_input("")->shape[3] == 3) {
+        m_takeover_preprocessor = new dl::image::ImagePreprocessor(takeover_model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
+    } else if (takeover_model->get_input("")->shape[3] == 1) {
+        m_takeover_preprocessor = new dl::image::ImagePreprocessor(takeover_model, {123.675}, {58.395});
+    } else {
+        ESP_LOGE("TAKEOVER", "Unsupported number of channels: %d", takeover_model->get_input("")->shape[3]);
+        delete takeover_model;
+        takeover_model = nullptr;
+        return false;
+    }
+
     if (!m_takeover_preprocessor) {
         ESP_LOGE("TAKEOVER", "Failed to create image preprocessor");
         delete takeover_model;
         takeover_model = nullptr;
         return false;
     }
+    takeover_model->profile_module();
 
     return true;
 }
 
-bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t &output_img) {
+bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t &output_img, dl::image::pix_type_t target_pix_type) {
     // original height and width
     int orig_height = input_img->height;
     int orig_width = input_img->width;
@@ -35,34 +47,29 @@ bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t 
     int y_max = orig_height;
     std::vector<int> crop_area = {x_min, y_min, x_max, y_max};
 
-    dl::image::img_t cropped_img;
-    cropped_img.height = y_max-y_min;
-    cropped_img.width = x_max-x_min;
-    cropped_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-    cropped_img.data = malloc(cropped_img.height * cropped_img.width * 3); // RGB888: 3 bytes per pixel
-
-    if (!cropped_img.data) {
-        ESP_LOGE("TAKEOVER", "Memory allocation failed");
-        free(cropped_img.data);
-        return false;
-    }
-
-    // Convert using ESP-DL
-    dl::image::convert_img(*input_img, cropped_img, 0, nullptr, crop_area);
-
     // rescale to 24x24
     int target_w = 24;
     int target_h = 24;
 
     output_img.height = target_h;
     output_img.width = target_w;
-    output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-    output_img.data = malloc(target_h * target_w * 3); // RGB888: 3 bytes per pixel
+    output_img.pix_type = target_pix_type;
+    if (target_pix_type == dl::image::DL_IMAGE_PIX_TYPE_RGB888)
+        output_img.data = malloc(target_h * target_w * 3); // RGB: 3 bytes per pixel
+    else if (target_pix_type == dl::image::DL_IMAGE_PIX_TYPE_GRAY)
+        output_img.data = malloc(target_h * target_w); // GRAY: 1 byte per pixel
 
     // Convert using ESP-DL
-    dl::image::resize(cropped_img, output_img, dl::image::DL_IMAGE_INTERPOLATE_BILINEAR);
+    takeoverTransformer.set_src_img(*input_img)
+        .set_src_img_crop_area({x_min, y_min, x_max, y_max})
+        .set_dst_img(output_img);
 
-    free(cropped_img.data);
+    esp_err_t err = takeoverTransformer.transform<false>();
+    if (err != ESP_OK) {
+        ESP_LOGE("TAKEOVER", "Image transformation failed: %d", err);
+        free(output_img.data);
+        return false;
+    }
 
     return true;
 }
@@ -71,6 +78,13 @@ std::vector<dl::cls::result_t> run_takeover_inference(const dl::image::img_t &in
     uint32_t t0, t1;
     float delta;
     t0 = esp_timer_get_time();
+    int channels = 0;
+    switch (input_img.pix_type) {
+        case dl::image::DL_IMAGE_PIX_TYPE_GRAY: channels = 1; break;
+        case dl::image::DL_IMAGE_PIX_TYPE_RGB888:   channels = 3; break;
+        default: channels = -1; break; // fallback for unknown types
+    }
+    ESP_LOGI("TAKEOVER", "input_img channels: %d", channels);
     
     m_takeover_preprocessor->preprocess(input_img);
 
@@ -91,6 +105,14 @@ std::vector<dl::cls::result_t> run_takeover_inference(const dl::image::img_t &in
 }
 
 bool process_takeover_image(const dl::image::img_t* input_img) {
+    int channels = 0;
+    switch (input_img->pix_type) {
+        case dl::image::DL_IMAGE_PIX_TYPE_GRAY: channels = 1; break;
+        case dl::image::DL_IMAGE_PIX_TYPE_RGB888:   channels = 3; break;
+        default: channels = -1; break; // fallback for unknown types
+    }
+    ESP_LOGI("PROCESS_TAKEOVER", "input_img channels: %d", channels);
+    
     const std::vector<dl::cls::result_t> results = run_takeover_inference(*input_img);
 
     float scores[1] = {0};

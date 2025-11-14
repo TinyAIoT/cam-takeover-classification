@@ -4,6 +4,7 @@
 extern const uint8_t espdl_surface_model[] asm("_binary_surface_espdl_start");
 dl::Model *surface_model = nullptr;
 dl::image::ImagePreprocessor *m_surface_preprocessor = nullptr;
+dl::image::ImageTransformer surfaceTransformer;
 
 bool initialize_surface_model() {
     surface_model = new dl::Model((const char *)espdl_surface_model);
@@ -47,7 +48,16 @@ bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &
     }
 
     // Convert using ESP-DL
-    dl::image::convert_img(*input_img, output_img, 0, nullptr, crop_area);
+    surfaceTransformer.set_src_img(*input_img)
+        .set_src_img_crop_area({x_min, y_min, x_max, y_max})
+        .set_dst_img(output_img);
+
+    esp_err_t err = surfaceTransformer.transform<false>();
+    if (err != ESP_OK) {
+        ESP_LOGE("SURFACE", "Image transformation failed: %d", err);
+        free(output_img.data);
+        return false;
+    }
 
     return true;
 }

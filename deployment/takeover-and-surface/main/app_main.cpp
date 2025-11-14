@@ -4,6 +4,9 @@
 #include "dl_image_preprocessor.hpp"
 #include "dl_cls_postprocessor.hpp"
 #include "dl_image_jpeg.hpp"
+#include "esp_jpeg_common.h"
+#include "esp_jpeg_dec.h"
+#include "esp_jpeg_enc.h"
 #include "bsp/esp-bsp.h"
 #include <esp_system.h>
 #include <nvs_flash.h>
@@ -72,10 +75,10 @@ static camera_config_t camera_config = {
     .ledc_timer = LEDC_TIMER_0,
     .ledc_channel = LEDC_CHANNEL_0,
 
-    .pixel_format = PIXFORMAT_JPEG, // PIXFORMAT_RGB565 , PIXFORMAT_JPEG
+    .pixel_format = PIXFORMAT_RGB565, // PIXFORMAT_RGB565 , PIXFORMAT_JPEG
     .frame_size = FRAMESIZE_QVGA,     // [<<320x240>> (QVGA, 4:3);FRAMESIZE_320X320, 240x176 (HQVGA, 15:11); 400x296 (CIF, 50:37)],FRAMESIZE_QVGA,FRAMESIZE_VGA
 
-    .jpeg_quality = 8, // 0-63 lower number means higher quality.  Reduce quality if stack overflow in cam_task
+    // .jpeg_quality = 8, // 0-63 lower number means higher quality.  Reduce quality if stack overflow in cam_task
     .fb_count = 2,     // if more than one, i2s runs in continuous mode. Use only with JPEG
     .fb_location = CAMERA_FB_IN_PSRAM,
     .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
@@ -102,33 +105,50 @@ static bool capture_image(dl::image::img_t &output_img) {
     // Use pic->buf to access the image
     ESP_LOGI("CAM", "Picture taken! Height: %d, Width: %d, Len: %zu", pic->height, pic->width, pic->len);
 
-    // Create JPEG structure
-    dl::image::jpeg_img_t jpeg_img;
-    jpeg_img.data = (uint8_t*)malloc(pic->len);
-    if (jpeg_img.data) {
-        memcpy(jpeg_img.data, pic->buf, pic->len);
-    } else {
-        ESP_LOGE("CAM", "Failed to allocate memory for JPEG image");
-        esp_camera_fb_return(pic);
-        return false;
-    }
-    jpeg_img.data_len = pic->len;
+    // // Create JPEG structure
+    // dl::image::jpeg_img_t jpeg_img;
+    // jpeg_img.data = (uint8_t*)malloc(pic->len);
+    // if (jpeg_img.data) {
+    //     memcpy(jpeg_img.data, pic->buf, pic->len);
+    // } else {
+    //     ESP_LOGE("CAM", "Failed to allocate memory for JPEG image");
+    //     esp_camera_fb_return(pic);
+    //     return false;
+    // }
+    // jpeg_img.data_len = pic->len;
 
-    // Free image data
+    // Free previous image data (if any)
     if (output_img.data) {
         free(output_img.data);
         output_img.data = nullptr;
     }
-    // Convert JPEG to RGB888
-    output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-    output_img = sw_decode_jpeg(jpeg_img, dl::image::DL_IMAGE_PIX_TYPE_RGB888);
+    // Prepare output image metadata
+    output_img.pix_type = camera_config.pixel_format == PIXFORMAT_GRAYSCALE ? dl::image::DL_IMAGE_PIX_TYPE_GRAY : dl::image::DL_IMAGE_PIX_TYPE_RGB888;
+    output_img.width = pic->width;
+    output_img.height = pic->height;
+
+    // Allocate and copy the frame buffer so the image remains valid
+    // after we return the camera frame with esp_camera_fb_return(pic).
+    size_t expected_size = dl::image::get_img_byte_size(output_img);
+    size_t copy_size = MIN((size_t)pic->len, expected_size);
+    output_img.data = malloc(expected_size);
+    if (!output_img.data) {
+        ESP_LOGE("CAM", "Failed to allocate memory for image copy (%zu bytes)", expected_size);
+        esp_camera_fb_return(pic);
+        return false;
+    }
+    // Zero the buffer if the camera provided less data than expected
+    if (copy_size < expected_size) {
+        memset(output_img.data, 0, expected_size);
+    }
+    memcpy(output_img.data, pic->buf, copy_size);
 
     esp_camera_fb_return(pic);
-    if(jpeg_img.data) {
-        ESP_LOGI("CAM", "Free heap before freeing: %lu bytes", esp_get_free_heap_size());
-        free(jpeg_img.data);
-        jpeg_img.data = nullptr;
-    }
+    // if(jpeg_img.data) {
+    //     ESP_LOGI("CAM", "Free heap before freeing: %lu bytes", esp_get_free_heap_size());
+    //     free(jpeg_img.data);
+    //     jpeg_img.data = nullptr;
+    // }
     return true;
 }
 
@@ -165,7 +185,7 @@ static bool convert_surface_into_buffer(int idx) {
 
 static bool convert_takeover_into_buffer(int idx) {
     dl::image::img_t converted_img;
-    if (!convert_takeover_image(&(g_buf[idx]), converted_img)) {
+    if (!convert_takeover_image(&(g_buf[idx]), converted_img, camera_config.pixel_format == PIXFORMAT_GRAYSCALE ? dl::image::DL_IMAGE_PIX_TYPE_GRAY : dl::image::DL_IMAGE_PIX_TYPE_RGB888)) {
         ESP_LOGE("TAKEOVER", "Could not convert image");
         return false;
     }
@@ -196,7 +216,7 @@ static bool convert_takeover_into_buffer(int idx) {
             takeover_buf[idx].data = nullptr;
         }
         // TODO: mutex
-        if (!ring_buffer.compose_4x4_image(takeover_buf[idx])) {
+        if (!ring_buffer.compose_4x4_image(takeover_buf[idx], camera_config.pixel_format == PIXFORMAT_GRAYSCALE ? dl::image::DL_IMAGE_PIX_TYPE_GRAY : dl::image::DL_IMAGE_PIX_TYPE_RGB888)) {
             ESP_LOGE("TAKEOVER", "Failed to compose 4x4 image");
             return false;
         }
@@ -235,9 +255,9 @@ static void camera_capture_task(void *pvParameters) {
             ESP_LOGE("CAM", "takeover conversion failed");
         }
 
-        if(!convert_surface_into_buffer(g_write_idx)) {
-            ESP_LOGE("CAM", "surface conversion failed");
-        }
+        // if(!convert_surface_into_buffer(g_write_idx)) {
+        //     ESP_LOGE("CAM", "surface conversion failed");
+        // }
 
         // Publish the new frame by flipping read_idx atomically (single int write is atomic on ESP32)
         g_read_idx = g_write_idx;
@@ -255,22 +275,23 @@ static void surface_classification_task(void *pvParameters) {
         ESP_LOGE("SURFACE", "Failed to initialize surface model");
         vTaskDelete(NULL);
     }
-    TickType_t sLastWakeTime = xTaskGetTickCount();
-    const TickType_t sFrequency = 1000 / portTICK_PERIOD_MS; //delay for mS
+    // TickType_t sLastWakeTime = xTaskGetTickCount();
+    // const TickType_t sFrequency = 50 / portTICK_PERIOD_MS; //delay for mS
     for (;;) {
-        sLastWakeTime = xTaskGetTickCount();
-        vTaskDelayUntil( &sLastWakeTime, sFrequency );
+        // delay until maximum frequency
+        // sLastWakeTime = xTaskGetTickCount();
+        // vTaskDelayUntil( &sLastWakeTime, sFrequency );
+        // calc and print framerate
         uint32_t now = xTaskGetTickCount();
         if (last_capture_time != 0) {
             float seconds = (now - last_capture_time) * portTICK_PERIOD_MS / 1000.0f;
             if (seconds > 0.0f) {
                 float fps = 1.0f / seconds;
-                ESP_LOGI("SURFACE", "Classification framerate: %.2f FPS", fps);
+                ESP_LOGW("SURFACE", "Classification framerate: %.2f FPS", fps);
             }
         }
         last_capture_time = now;
 
-        // Read current frame index AFTER take: memory order is fine through semaphore
         int idx = g_read_idx;
 
         if (!process_surface_image(&surface_buf[idx])) {
@@ -287,19 +308,19 @@ static void takeover_classification_task(void *pvParameters) {
         ESP_LOGE("TAKEOVER", "Failed to initialize takeover model");
         vTaskDelete(NULL);
     }
-    TickType_t tLastWakeTime = xTaskGetTickCount();
-    const TickType_t tFrequency = 400 / portTICK_PERIOD_MS; //delay for mS
+    // TickType_t tLastWakeTime = xTaskGetTickCount();
+    // const TickType_t tFrequency = 50 / portTICK_PERIOD_MS; //delay for mS
     for (;;) {
         // delay until maximum frequency
-        tLastWakeTime = xTaskGetTickCount();
-        vTaskDelayUntil( &tLastWakeTime, tFrequency );
+        // tLastWakeTime = xTaskGetTickCount();
+        // vTaskDelayUntil( &tLastWakeTime, tFrequency );
         // calc and print framerate
         uint32_t now = xTaskGetTickCount();
         if (last_capture_time != 0) {
             float seconds = (now - last_capture_time) * portTICK_PERIOD_MS / 1000.0f;
             if (seconds > 0.0f) {
                 float fps = 1.0f / seconds;
-                ESP_LOGI("TAKEOVER", "Classification framerate: %.2f FPS", fps);
+                ESP_LOGW("TAKEOVER", "Classification framerate: %.2f FPS", fps);
             }
         }
         last_capture_time = now;
@@ -373,6 +394,6 @@ extern "C" void app_main(void) {
     xTaskCreatePinnedToCore(camera_capture_task,            "camera",   8192*2, NULL, 12, NULL, 0);
     vTaskDelay(3500 / portTICK_PERIOD_MS);
     xTaskCreatePinnedToCore(takeover_classification_task,   "takeover", 8192*2, NULL, 17, NULL, 0);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    xTaskCreatePinnedToCore(surface_classification_task,    "surface",  8192*2, NULL, 17, NULL, 1);
-}
+    // vTaskDelay(100 / portTICK_PERIOD_MS);
+    // xTaskCreatePinnedToCore(surface_classification_task,    "surface",  8192*2, NULL, 17, NULL, 1);
+    }
