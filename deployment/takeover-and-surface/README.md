@@ -16,12 +16,12 @@ The camera captures an image and then triggers surface and takeover classificati
     - smaller models 
         - [ ] 4bit instead of 8bit
             - this is prob not going to make it faster... just smaller... but Ill still try
-        - [ ] grayscale
+        - [x] grayscale
     - [x] classify serially and with multicore -> this made the first classification run much faster!
     - [x] mutex -> didnt help
 - [ ] better models
     - more data
-    - ideaB for takeover classification
+    - [x] grayscale
 - refactoring
     - [ ] sensor class (+ class for classifications?)
     - [ ] clean up BLE
