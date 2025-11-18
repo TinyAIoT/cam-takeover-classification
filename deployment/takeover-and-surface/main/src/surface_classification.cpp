@@ -12,34 +12,49 @@ bool initialize_surface_model() {
         ESP_LOGE("SURFACE", "Failed to create model");
         return false;
     }
+    
+    // TODO: the preprocesser could potentially be recreated by us, to save a bit of computation. Because we are already doing the imageTransformation anyway.
+    if (surface_model->get_input("")->shape[3] == 3) {
+        m_surface_preprocessor = new dl::image::ImagePreprocessor(surface_model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
+    } else if (surface_model->get_input("")->shape[3] == 1) {
+        m_surface_preprocessor = new dl::image::ImagePreprocessor(surface_model, {123.675}, {58.395});
+    } else {
+        ESP_LOGE("SURFACE", "Unsupported number of channels: %d", surface_model->get_input("")->shape[3]);
+        delete surface_model;
+        surface_model = nullptr;
+        return false;
+    }
 
-    m_surface_preprocessor = new dl::image::ImagePreprocessor(surface_model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
     if (!m_surface_preprocessor) {
         ESP_LOGE("SURFACE", "Failed to create image preprocessor");
         delete surface_model;
         surface_model = nullptr;
         return false;
     }
+    surface_model->profile_module();
 
     return true;
 }
 
-bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &output_img) {
+bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &output_img, dl::image::pix_type_t target_pix_type) {
     // original height and width
     int orig_height = input_img->height;
     int orig_width = input_img->width;
 
     // crop to square
     int x_min = orig_width/6;
-    int x_max = x_min + 96;
+    int x_max = x_min + 144;
     int y_min = orig_height/4;
-    int y_max = y_min + 96;
+    int y_max = y_min + 144;
     std::vector<int> crop_area = {x_min, y_min, x_max, y_max};
 
     output_img.height = y_max-y_min;
     output_img.width = x_max-x_min;
-    output_img.pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888;
-    output_img.data = malloc(output_img.height * output_img.width * 3); // RGB888: 3 bytes per pixel
+    output_img.pix_type = target_pix_type;
+    if (target_pix_type == dl::image::DL_IMAGE_PIX_TYPE_RGB888)
+        output_img.data = malloc(output_img.height * output_img.width * 3); // RGB: 3 bytes per pixel
+    else if (target_pix_type == dl::image::DL_IMAGE_PIX_TYPE_GRAY)
+        output_img.data = malloc(output_img.height  * output_img.width); // GRAY: 1 byte per pixel
 
     if (!output_img.data) {
         ESP_LOGE("SURFACE", "Memory allocation failed");
@@ -48,7 +63,8 @@ bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &
     }
 
     // Convert using ESP-DL
-    surfaceTransformer.set_src_img(*input_img)
+    surfaceTransformer
+        .set_src_img(*input_img)
         .set_src_img_crop_area({x_min, y_min, x_max, y_max})
         .set_dst_img(output_img);
 

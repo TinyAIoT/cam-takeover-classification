@@ -10,6 +10,6 @@
 #include "surface_category_name.hpp"
 
 bool initialize_surface_model();
-bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &output_img);
+bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &output_img, dl::image::pix_type_t target_pix_type);
 std::vector<dl::cls::result_t> run_surface_inference(const dl::image::img_t &img);
 bool process_surface_image(const dl::image::img_t* input_img);

@@ -13,6 +13,7 @@ bool initialize_takeover_model() {
         return false;
     }
 
+    // TODO: the preprocesser could potentially be recreated by us, to save a bit of computation. Because we are already doing the imageTransformation anyway.
     if (takeover_model->get_input("")->shape[3] == 3) {
         m_takeover_preprocessor = new dl::image::ImagePreprocessor(takeover_model, {123.675, 116.28, 103.53}, {58.395, 57.12, 57.375});
     } else if (takeover_model->get_input("")->shape[3] == 1) {
@@ -30,7 +31,7 @@ bool initialize_takeover_model() {
         takeover_model = nullptr;
         return false;
     }
-    takeover_model->profile_module();
+    takeover_model->profile_memory();
 
     return true;
 }
@@ -60,7 +61,8 @@ bool convert_takeover_image(const dl::image::img_t* input_img, dl::image::img_t 
         output_img.data = malloc(target_h * target_w); // GRAY: 1 byte per pixel
 
     // Convert using ESP-DL
-    takeoverTransformer.set_src_img(*input_img)
+    takeoverTransformer
+        .set_src_img(*input_img)
         .set_src_img_crop_area({x_min, y_min, x_max, y_max})
         .set_dst_img(output_img);
 
@@ -84,7 +86,6 @@ std::vector<dl::cls::result_t> run_takeover_inference(const dl::image::img_t &in
         case dl::image::DL_IMAGE_PIX_TYPE_RGB888:   channels = 3; break;
         default: channels = -1; break; // fallback for unknown types
     }
-    ESP_LOGI("TAKEOVER", "input_img channels: %d", channels);
     
     m_takeover_preprocessor->preprocess(input_img);
 
@@ -111,7 +112,6 @@ bool process_takeover_image(const dl::image::img_t* input_img) {
         case dl::image::DL_IMAGE_PIX_TYPE_RGB888:   channels = 3; break;
         default: channels = -1; break; // fallback for unknown types
     }
-    ESP_LOGI("PROCESS_TAKEOVER", "input_img channels: %d", channels);
     
     const std::vector<dl::cls::result_t> results = run_takeover_inference(*input_img);
 

@@ -48,6 +48,8 @@
 #define portTICK_RATE_MS portTICK_PERIOD_MS
 #endif
 
+#define MOSAIC_WIDTH 16
+
 static const char *device_name = "senseBox:bike[XXX]";
 
 // Camera Module pin mapping
@@ -75,7 +77,7 @@ static camera_config_t camera_config = {
     .ledc_timer = LEDC_TIMER_0,
     .ledc_channel = LEDC_CHANNEL_0,
 
-    .pixel_format = PIXFORMAT_RGB565, // PIXFORMAT_RGB565 , PIXFORMAT_JPEG
+    .pixel_format = PIXFORMAT_GRAYSCALE, // if grayscale: this line has to be changed to gray too: https://github.com/espressif/esp-dl/blob/f666d7671599dab74f67a3ecc2cb6668bf4e2de9/esp-dl/vision/image/dl_image_preprocessor.cpp#L22
     .frame_size = FRAMESIZE_QVGA,     // [<<320x240>> (QVGA, 4:3);FRAMESIZE_320X320, 240x176 (HQVGA, 15:11); 400x296 (CIF, 50:37)],FRAMESIZE_QVGA,FRAMESIZE_VGA
 
     // .jpeg_quality = 8, // 0-63 lower number means higher quality.  Reduce quality if stack overflow in cam_task
@@ -176,7 +178,7 @@ static bool convert_surface_into_buffer(int idx) {
         free(surface_buf[idx].data);
         surface_buf[idx].data = nullptr;
     }
-    if (!convert_surface_image(&(g_buf[idx]), surface_buf[idx])) {
+    if (!convert_surface_image(&(g_buf[idx]), surface_buf[idx], camera_config.pixel_format == PIXFORMAT_GRAYSCALE ? dl::image::DL_IMAGE_PIX_TYPE_GRAY : dl::image::DL_IMAGE_PIX_TYPE_RGB888)) {
         ESP_LOGE("SURFACE", "Could not convert image");
         return false;
     }
@@ -209,15 +211,15 @@ static bool convert_takeover_into_buffer(int idx) {
         ESP_LOGI("TAKEOVER", "Ring buffer has not been filled yet.");
         return false; // Not enough images yet
     } else {
-        ESP_LOGI("TAKEOVER", "Ring buffer is full. Composing 4x4 image.");
+        ESP_LOGI("TAKEOVER", "Ring buffer is full. Composing %d x %d image", 16/MOSAIC_WIDTH, MOSAIC_WIDTH);
         // Free previous data to prevent memory leak
         if (takeover_buf[idx].data) {
             free(takeover_buf[idx].data);
             takeover_buf[idx].data = nullptr;
         }
         // TODO: mutex
-        if (!ring_buffer.compose_4x4_image(takeover_buf[idx], camera_config.pixel_format == PIXFORMAT_GRAYSCALE ? dl::image::DL_IMAGE_PIX_TYPE_GRAY : dl::image::DL_IMAGE_PIX_TYPE_RGB888)) {
-            ESP_LOGE("TAKEOVER", "Failed to compose 4x4 image");
+        if (!ring_buffer.compose_image(takeover_buf[idx], camera_config.pixel_format == PIXFORMAT_GRAYSCALE ? dl::image::DL_IMAGE_PIX_TYPE_GRAY : dl::image::DL_IMAGE_PIX_TYPE_RGB888, MOSAIC_WIDTH)) {
+            ESP_LOGE("TAKEOVER", "Failed to compose %d x %d image", 16/MOSAIC_WIDTH, MOSAIC_WIDTH);
             return false;
         }
     }
@@ -228,6 +230,10 @@ static void camera_capture_task(void *pvParameters) {
     TickType_t cLastWakeTime = xTaskGetTickCount();
     const TickType_t cFrequency = 150 / portTICK_PERIOD_MS; //delay for mS
     uint32_t last_capture_time = 0;
+    // rolling buffer for camera capture FPS (kept outside loop so initialized once)
+    static float capture_fps_buf[50] = {0};
+    static int capture_fps_buf_idx = 0;
+    static int capture_fps_buf_count = 0; // number of valid entries (<=50)
     for (;;) {
         // delay until maximum frequency
         cLastWakeTime = xTaskGetTickCount();
@@ -238,7 +244,17 @@ static void camera_capture_task(void *pvParameters) {
             float seconds = (now - last_capture_time) * portTICK_PERIOD_MS / 1000.0f;
             if (seconds > 0.0f) {
                 float fps = 1.0f / seconds;
-                ESP_LOGI("CAM", "Capture framerate: %.2f FPS", fps);
+
+                // push into circular buffer
+                capture_fps_buf[capture_fps_buf_idx] = fps;
+                capture_fps_buf_idx = (capture_fps_buf_idx + 1) % 50;
+                if (capture_fps_buf_count < 50) capture_fps_buf_count++;
+
+                float sum = 0.0f;
+                for (int i = 0; i < capture_fps_buf_count; ++i) sum += capture_fps_buf[i];
+                float avg = sum / (float)capture_fps_buf_count;
+
+                ESP_LOGI("CAM", "Capture framerate: %.2f FPS (avg last %d: %.2f FPS)", fps, capture_fps_buf_count, avg);
             }
         }
         last_capture_time = now;
@@ -255,9 +271,9 @@ static void camera_capture_task(void *pvParameters) {
             ESP_LOGE("CAM", "takeover conversion failed");
         }
 
-        // if(!convert_surface_into_buffer(g_write_idx)) {
-        //     ESP_LOGE("CAM", "surface conversion failed");
-        // }
+        if(!convert_surface_into_buffer(g_write_idx)) {
+            ESP_LOGE("CAM", "surface conversion failed");
+        }
 
         // Publish the new frame by flipping read_idx atomically (single int write is atomic on ESP32)
         g_read_idx = g_write_idx;
@@ -275,6 +291,10 @@ static void surface_classification_task(void *pvParameters) {
         ESP_LOGE("SURFACE", "Failed to initialize surface model");
         vTaskDelete(NULL);
     }
+    // rolling buffer for surface classification FPS (kept outside loop so initialized once)
+    static float surface_fps_buf[50] = {0};
+    static int surface_fps_buf_idx = 0;
+    static int surface_fps_buf_count = 0; // number of valid entries (<=16)
     // TickType_t sLastWakeTime = xTaskGetTickCount();
     // const TickType_t sFrequency = 50 / portTICK_PERIOD_MS; //delay for mS
     for (;;) {
@@ -286,8 +306,16 @@ static void surface_classification_task(void *pvParameters) {
         if (last_capture_time != 0) {
             float seconds = (now - last_capture_time) * portTICK_PERIOD_MS / 1000.0f;
             if (seconds > 0.0f) {
-                float fps = 1.0f / seconds;
-                ESP_LOGW("SURFACE", "Classification framerate: %.2f FPS", fps);
+                    float fps = 1.0f / seconds;
+                    surface_fps_buf[surface_fps_buf_idx] = fps;
+                    surface_fps_buf_idx = (surface_fps_buf_idx + 1) % 50;
+                    if (surface_fps_buf_count < 50) surface_fps_buf_count++;
+
+                    float sum = 0.0f;
+                    for (int i = 0; i < surface_fps_buf_count; ++i) sum += surface_fps_buf[i];
+                    float avg = sum / (float)surface_fps_buf_count;
+
+                    ESP_LOGW("SURFACE", "Classification framerate: %.2f FPS (avg last %d: %.2f FPS)", fps, surface_fps_buf_count, avg);
             }
         }
         last_capture_time = now;
@@ -308,6 +336,10 @@ static void takeover_classification_task(void *pvParameters) {
         ESP_LOGE("TAKEOVER", "Failed to initialize takeover model");
         vTaskDelete(NULL);
     }
+    // rolling buffer for takeover classification FPS (kept outside loop so initialized once)
+    static float takeover_fps_buf[50] = {0};
+    static int takeover_fps_buf_idx = 0;
+    static int takeover_fps_buf_count = 0; // number of valid entries (<=16)
     // TickType_t tLastWakeTime = xTaskGetTickCount();
     // const TickType_t tFrequency = 50 / portTICK_PERIOD_MS; //delay for mS
     for (;;) {
@@ -320,7 +352,15 @@ static void takeover_classification_task(void *pvParameters) {
             float seconds = (now - last_capture_time) * portTICK_PERIOD_MS / 1000.0f;
             if (seconds > 0.0f) {
                 float fps = 1.0f / seconds;
-                ESP_LOGW("TAKEOVER", "Classification framerate: %.2f FPS", fps);
+                takeover_fps_buf[takeover_fps_buf_idx] = fps;
+                takeover_fps_buf_idx = (takeover_fps_buf_idx + 1) % 50;
+                if (takeover_fps_buf_count < 50) takeover_fps_buf_count++;
+
+                float sum = 0.0f;
+                for (int i = 0; i < takeover_fps_buf_count; ++i) sum += takeover_fps_buf[i];
+                float avg = sum / (float)takeover_fps_buf_count;
+
+                ESP_LOGW("TAKEOVER", "Classification framerate: %.2f FPS (avg last %d: %.2f FPS)", fps, takeover_fps_buf_count, avg);
             }
         }
         last_capture_time = now;
@@ -390,10 +430,10 @@ extern "C" void app_main(void) {
 
     set_LED(0, 255, 0, 10);
 
-    xTaskCreatePinnedToCore(distance_task,                  "distance", 8192, NULL, 1, NULL, 0);
-    xTaskCreatePinnedToCore(camera_capture_task,            "camera",   8192*2, NULL, 12, NULL, 0);
+    // xTaskCreatePinnedToCore(distance_task,                  "distance", 8192, NULL, 1, NULL, 0);
+    xTaskCreatePinnedToCore(camera_capture_task,            "camera",   8192*2, NULL, 20, NULL, 1);
     vTaskDelay(3500 / portTICK_PERIOD_MS);
-    xTaskCreatePinnedToCore(takeover_classification_task,   "takeover", 8192*2, NULL, 17, NULL, 0);
-    // vTaskDelay(100 / portTICK_PERIOD_MS);
-    // xTaskCreatePinnedToCore(surface_classification_task,    "surface",  8192*2, NULL, 17, NULL, 1);
+    // xTaskCreatePinnedToCore(surface_classification_task,   "surface", 8192*2, NULL, 19, NULL, 0);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    xTaskCreatePinnedToCore(takeover_classification_task,    "takeover",  8192*2, NULL, 19, NULL, 1);
     }
