@@ -77,7 +77,7 @@ static camera_config_t camera_config = {
     .ledc_timer = LEDC_TIMER_0,
     .ledc_channel = LEDC_CHANNEL_0,
 
-    .pixel_format = PIXFORMAT_GRAYSCALE, // if grayscale: this line has to be changed to gray too: https://github.com/espressif/esp-dl/blob/f666d7671599dab74f67a3ecc2cb6668bf4e2de9/esp-dl/vision/image/dl_image_preprocessor.cpp#L22
+    .pixel_format = PIXFORMAT_RGB565, // if grayscale: this line has to be changed to gray too: https://github.com/espressif/esp-dl/blob/f666d7671599dab74f67a3ecc2cb6668bf4e2de9/esp-dl/vision/image/dl_image_preprocessor.cpp#L22
     .frame_size = FRAMESIZE_QVGA,     // [<<320x240>> (QVGA, 4:3);FRAMESIZE_320X320, 240x176 (HQVGA, 15:11); 400x296 (CIF, 50:37)],FRAMESIZE_QVGA,FRAMESIZE_VGA
 
     // .jpeg_quality = 8, // 0-63 lower number means higher quality.  Reduce quality if stack overflow in cam_task
@@ -433,7 +433,7 @@ extern "C" void app_main(void) {
     // xTaskCreatePinnedToCore(distance_task,                  "distance", 8192, NULL, 1, NULL, 0);
     xTaskCreatePinnedToCore(camera_capture_task,            "camera",   8192*2, NULL, 20, NULL, 1);
     vTaskDelay(3500 / portTICK_PERIOD_MS);
-    // xTaskCreatePinnedToCore(surface_classification_task,   "surface", 8192*2, NULL, 19, NULL, 0);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    xTaskCreatePinnedToCore(takeover_classification_task,    "takeover",  8192*2, NULL, 19, NULL, 1);
+    // xTaskCreatePinnedToCore(surface_classification_task,   "surface", 8192*2, NULL, 19, NULL, 1);
+    // vTaskDelay(400 / portTICK_PERIOD_MS);
+    xTaskCreatePinnedToCore(takeover_classification_task,    "takeover",  8192*2, NULL, 19, NULL, 0);
     }

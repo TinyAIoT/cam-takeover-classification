@@ -32,6 +32,7 @@ bool initialize_takeover_model() {
         return false;
     }
     takeover_model->profile_memory();
+    takeover_model->profile_module();
 
     return true;
 }
@@ -89,7 +90,7 @@ std::vector<dl::cls::result_t> run_takeover_inference(const dl::image::img_t &in
     
     m_takeover_preprocessor->preprocess(input_img);
 
-    takeover_model->run(dl::RUNTIME_MODE_MULTI_CORE);
+    takeover_model->run(); //dl::RUNTIME_MODE_MULTI_CORE);
     const int check = 5;
     TakeoverPostProcessor m_postprocessor(takeover_model, check, std::numeric_limits<float>::lowest(), true);
     std::vector<dl::cls::result_t> &results = m_postprocessor.postprocess();

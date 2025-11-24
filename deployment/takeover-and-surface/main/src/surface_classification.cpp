@@ -31,7 +31,7 @@ bool initialize_surface_model() {
         surface_model = nullptr;
         return false;
     }
-    surface_model->profile_module();
+    // surface_model->profile_module();
 
     return true;
 }
@@ -85,7 +85,7 @@ std::vector<dl::cls::result_t> run_surface_inference(const dl::image::img_t &inp
     
     m_surface_preprocessor->preprocess(input_img);
 
-    surface_model->run(dl::RUNTIME_MODE_MULTI_CORE);
+    surface_model->run(); //dl::RUNTIME_MODE_MULTI_CORE);
     const int check = 5;
     SurfacePostProcessor m_postprocessor(surface_model, check, std::numeric_limits<float>::lowest(), true);
     std::vector<dl::cls::result_t> &results = m_postprocessor.postprocess();
