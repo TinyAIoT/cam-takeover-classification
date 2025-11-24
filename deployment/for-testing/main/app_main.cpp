@@ -39,7 +39,7 @@ extern const uint8_t espdl_model[] asm("_binary_squeezenet_espdl_start");
 static const char *model_path = (const char *)espdl_model;
 
 // Set to true to take a camera picture, else make sure to add an img
-#define TAKE_PICTURE false
+#define TAKE_PICTURE true
 #define SAVE_TO_SDCARD true
 
 
