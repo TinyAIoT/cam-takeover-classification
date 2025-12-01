@@ -41,7 +41,7 @@ bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &
     int orig_height = input_img->height;
     int orig_width = input_img->width;
 
-    // crop to custom
+    // crop to square
     int x_min = 32;
     int x_max = x_min + 48;
     int y_min = 0;
@@ -85,7 +85,7 @@ std::vector<dl::cls::result_t> run_surface_inference(const dl::image::img_t &inp
     
     m_surface_preprocessor->preprocess(input_img);
 
-    surface_model->run(dl::RUNTIME_MODE_MULTI_CORE);
+    surface_model->run(); //dl::RUNTIME_MODE_MULTI_CORE);
     const int check = 5;
     SurfacePostProcessor m_postprocessor(surface_model, check, std::numeric_limits<float>::lowest(), true);
     std::vector<dl::cls::result_t> &results = m_postprocessor.postprocess();
