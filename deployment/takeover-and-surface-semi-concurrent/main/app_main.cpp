@@ -12,6 +12,7 @@
 #include <nvs_flash.h>
 #include <string.h>
 #include <sys/param.h>
+#include <esp_timer.h>
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "services/gap/ble_svc_gap.h"
@@ -165,6 +166,8 @@ ImageRingBuffer ring_buffer;
 // Optional: a mutex if your img_t needs guarded access during capture
 // (generally not needed with strict read/write separation via indices)
 static SemaphoreHandle_t g_buf_mutex; // (optional)
+// Handle for the classification task so the camera task can notify it
+static TaskHandle_t classification_task_handle = NULL;
 
 // ---- Capture -> fill buffer[write_idx] ----
 static bool capture_into_buffer(int idx) {
@@ -255,17 +258,22 @@ static bool copy_image(const dl::image::img_t &src, dl::image::img_t &dst) {
 }
 
 static void camera_capture_task(void *pvParameters) {
-    // TickType_t cLastWakeTime = xTaskGetTickCount();
-    // const TickType_t cFrequency = 100 / portTICK_PERIOD_MS; //delay for mS
+    if (!init_distance()) {
+        set_LED(255, 0, 150, 20);
+        ESP_LOGE("DISTANCE", "Failed to initialize distance sensor"); 
+        vTaskDelete(NULL);
+    }
+
+    TickType_t cLastWakeTime = xTaskGetTickCount();
+    const TickType_t cFrequency = pdMS_TO_TICKS(150); // 143 ms
     uint32_t last_capture_time = 0;
     // rolling buffer for camera capture FPS (kept outside loop so initialized once)
     static float capture_fps_buf[50] = {0};
     static int capture_fps_buf_idx = 0;
     static int capture_fps_buf_count = 0; // number of valid entries (<=50)
     for (;;) {
-        // // delay until maximum frequency
-        // cLastWakeTime = xTaskGetTickCount();
-        // vTaskDelayUntil( &cLastWakeTime, cFrequency );
+        // delay until maximum frequency (keep `cLastWakeTime` across iterations)
+        vTaskDelayUntil(&cLastWakeTime, cFrequency);
         // calc and print framerate
         uint32_t now = xTaskGetTickCount();
         if (last_capture_time != 0) {
@@ -282,7 +290,7 @@ static void camera_capture_task(void *pvParameters) {
                 for (int i = 0; i < capture_fps_buf_count; ++i) sum += capture_fps_buf[i];
                 float avg = sum / (float)capture_fps_buf_count;
 
-                ESP_LOGI("CAM", "Capture framerate: %.2f FPS (avg last %d: %.2f FPS)", fps, capture_fps_buf_count, avg);
+                ESP_LOGW("CAM", "Capture framerate: %.2f FPS (avg last %d: %.2f FPS)", fps, capture_fps_buf_count, avg);
             }
         }
         last_capture_time = now;
@@ -303,11 +311,19 @@ static void camera_capture_task(void *pvParameters) {
             ESP_LOGE("CAM", "surface conversion failed");
         }
 
+        float distance = get_distance();
+        ESP_LOGI("DISTANCE", "Distance: %.2f cm", distance);
+
         // Publish the new frame by flipping read_idx atomically (single int write is atomic on ESP32)
         g_read_idx = g_write_idx;
 
         // Flip write index for the next capture
         g_write_idx ^= 1;
+
+        // Notify classification task that a new frame is available
+        if (classification_task_handle != NULL) {
+            xTaskNotifyGive(classification_task_handle);
+        }
     }
 }
 
@@ -329,6 +345,11 @@ static void classification_task(void *pvParameters) {
     static int classification_fps_buf_idx = 0;
     static int classification_fps_buf_count = 0; // number of valid entries (<=16)
     for (;;) {
+        // Wait until camera notifies that a new frame is available.
+        // This coalesces multiple arrivals while the classifier is busy —
+        // the classifier will process the latest published frame.
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
         // calc and print framerate
         uint32_t now = xTaskGetTickCount();
         if (last_capture_time != 0) {
@@ -350,160 +371,34 @@ static void classification_task(void *pvParameters) {
 
         int idx = g_read_idx;
         // -------------------- Takeover Classification --------------------
-        // Copy the shared buffer into a local image to avoid races on the shared pointer
-        dl::image::img_t local_surface_img = {};
-        if (!copy_image(takeover_buf[idx], local_surface_img)) {
-            ESP_LOGE("TAKEOVER", "Failed to copy image for processing");
-            // brief delay to avoid busy-looping if allocation keeps failing
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-            continue;
-        }
-        if (!process_takeover_image(&local_surface_img)) {
-            ESP_LOGE("TAKEOVER", "processing failed");
-        }
-        // free local copy
-        if (local_surface_img.data) {
-            free(local_surface_img.data);
-            local_surface_img.data = nullptr;
+        {
+            TickType_t t0 = xTaskGetTickCount();
+            bool ok = process_takeover_image(&takeover_buf[idx]);
+            TickType_t t1 = xTaskGetTickCount();
+            TickType_t elapsed_ticks = t1 - t0;
+            uint64_t elapsed_ms = (uint64_t)elapsed_ticks * (uint64_t)portTICK_PERIOD_MS;
+            if (!ok) {
+                ESP_LOGE("TAKEOVER", "processing failed (took %llu ticks / %llu ms)", (unsigned long long)elapsed_ticks, (unsigned long long)elapsed_ms);
+                continue;
+            } else {
+                ESP_LOGW("TAKEOVER", "processing succeeded (took %llu ticks / %llu ms)", (unsigned long long)elapsed_ticks, (unsigned long long)elapsed_ms);
+            }
         }
         // -------------------- Surface Classification --------------------
-        // Copy the shared buffer into a local image to avoid races on the shared pointer
-        dl::image::img_t local_takeover_img = {};
-        if (!copy_image(surface_buf[idx], local_takeover_img)) {
-            ESP_LOGE("SURFACE", "Failed to copy image for processing");
-            // brief delay to avoid busy-looping if allocation keeps failing
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-            continue;
-        }
-
-        if (!process_surface_image(&local_takeover_img)) {
-            ESP_LOGE("SURFACE", "processing failed");
-        }
-
-        // free local copy
-        if (local_takeover_img.data) {
-            free(local_takeover_img.data);
-            local_takeover_img.data = nullptr;
-        }
-    }
-}
-
-static void surface_classification_task(void *pvParameters) {
-    ESP_LOGI("SURFACE", "start (core=%d, tick=%u)", xPortGetCoreID(), xTaskGetTickCount());
-    uint32_t last_capture_time = 0;
-    if (!initialize_surface_model()) {
-        set_LED(255, 0, 150, 20);
-        ESP_LOGE("SURFACE", "Failed to initialize surface model");
-        vTaskDelete(NULL);
-    }
-    // rolling buffer for surface classification FPS (kept outside loop so initialized once)
-    static float surface_fps_buf[50] = {0};
-    static int surface_fps_buf_idx = 0;
-    static int surface_fps_buf_count = 0; // number of valid entries (<=16)
-    // TickType_t sLastWakeTime = xTaskGetTickCount();
-    // const TickType_t sFrequency = 50 / portTICK_PERIOD_MS; //delay for mS
-    for (;;) {
-        // delay until maximum frequency
-        // sLastWakeTime = xTaskGetTickCount();
-        // vTaskDelayUntil( &sLastWakeTime, sFrequency );
-        // calc and print framerate
-        uint32_t now = xTaskGetTickCount();
-        if (last_capture_time != 0) {
-            float seconds = (now - last_capture_time) * portTICK_PERIOD_MS / 1000.0f;
-            if (seconds > 0.0f) {
-                    float fps = 1.0f / seconds;
-                    surface_fps_buf[surface_fps_buf_idx] = fps;
-                    surface_fps_buf_idx = (surface_fps_buf_idx + 1) % 50;
-                    if (surface_fps_buf_count < 50) surface_fps_buf_count++;
-
-                    float sum = 0.0f;
-                    for (int i = 0; i < surface_fps_buf_count; ++i) sum += surface_fps_buf[i];
-                    float avg = sum / (float)surface_fps_buf_count;
-
-                    ESP_LOGW("SURFACE", "Classification framerate: %.2f FPS (avg last %d: %.2f FPS)", fps, surface_fps_buf_count, avg);
+        {
+            TickType_t s0 = xTaskGetTickCount();
+            bool sok = process_surface_image(&surface_buf[idx]);
+            TickType_t s1 = xTaskGetTickCount();
+            TickType_t selapsed_ticks = s1 - s0;
+            ESP_LOGE("SURFACE", "1");
+            uint64_t selapsed_ms = (uint64_t)selapsed_ticks * (uint64_t)portTICK_PERIOD_MS;
+            ESP_LOGE("SURFACE", "2");
+            if (!sok) {
+                ESP_LOGE("SURFACE", "processing failed (took %llu ticks / %llu ms)", (unsigned long long)selapsed_ticks, (unsigned long long)selapsed_ms);
+                continue;
+            } else {
+                ESP_LOGW("SURFACE", "processing succeeded (took %llu ticks / %llu ms)", (unsigned long long)selapsed_ticks, (unsigned long long)selapsed_ms);
             }
-        }
-        last_capture_time = now;
-
-        int idx = g_read_idx;
-
-        // Copy the shared buffer into a local image to avoid races on the shared pointer
-        dl::image::img_t local_img = {};
-        if (!copy_image(surface_buf[idx], local_img)) {
-            ESP_LOGE("SURFACE", "Failed to copy image for processing");
-            // brief delay to avoid busy-looping if allocation keeps failing
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-            continue;
-        }
-
-        if (!process_surface_image(&local_img)) {
-            ESP_LOGE("SURFACE", "processing failed");
-        }
-
-        // free local copy
-        if (local_img.data) {
-            free(local_img.data);
-            local_img.data = nullptr;
-        }
-    }
-}
-
-static void takeover_classification_task(void *pvParameters) {
-    ESP_LOGI("TAKEOVER", "start (core=%d, tick=%u)", xPortGetCoreID(), xTaskGetTickCount());
-    uint32_t last_capture_time = 0;
-    if (!initialize_takeover_model()) {
-        set_LED(255, 0, 150, 20);
-        ESP_LOGE("TAKEOVER", "Failed to initialize takeover model");
-        vTaskDelete(NULL);
-    }
-    // rolling buffer for takeover classification FPS (kept outside loop so initialized once)
-    static float takeover_fps_buf[50] = {0};
-    static int takeover_fps_buf_idx = 0;
-    static int takeover_fps_buf_count = 0; // number of valid entries (<=16)
-    // TickType_t tLastWakeTime = xTaskGetTickCount();
-    // const TickType_t tFrequency = 50 / portTICK_PERIOD_MS; //delay for mS
-    for (;;) {
-        // delay until maximum frequency
-        // tLastWakeTime = xTaskGetTickCount();
-        // vTaskDelayUntil( &tLastWakeTime, tFrequency );
-        // calc and print framerate
-        uint32_t now = xTaskGetTickCount();
-        if (last_capture_time != 0) {
-            float seconds = (now - last_capture_time) * portTICK_PERIOD_MS / 1000.0f;
-            if (seconds > 0.0f) {
-                float fps = 1.0f / seconds;
-                takeover_fps_buf[takeover_fps_buf_idx] = fps;
-                takeover_fps_buf_idx = (takeover_fps_buf_idx + 1) % 50;
-                if (takeover_fps_buf_count < 50) takeover_fps_buf_count++;
-
-                float sum = 0.0f;
-                for (int i = 0; i < takeover_fps_buf_count; ++i) sum += takeover_fps_buf[i];
-                float avg = sum / (float)takeover_fps_buf_count;
-
-                ESP_LOGW("TAKEOVER", "Classification framerate: %.2f FPS (avg last %d: %.2f FPS)", fps, takeover_fps_buf_count, avg);
-            }
-        }
-        last_capture_time = now;
-
-        int idx = g_read_idx;
-
-        // Copy the shared buffer into a local image to avoid races on the shared pointer
-        dl::image::img_t local_img = {};
-        if (!copy_image(takeover_buf[idx], local_img)) {
-            ESP_LOGE("TAKEOVER", "Failed to copy image for processing");
-            // brief delay to avoid busy-looping if allocation keeps failing
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-            continue;
-        }
-
-        if (!process_takeover_image(&local_img)) {
-            ESP_LOGE("TAKEOVER", "processing failed");
-        }
-
-        // free local copy
-        if (local_img.data) {
-            free(local_img.data);
-            local_img.data = nullptr;
         }
     }
 }
@@ -520,7 +415,6 @@ static void distance_task(void *pvParameters) {
     const TickType_t tFrequency = 400 / portTICK_PERIOD_MS; //delay for mS
     for (;;) {
         // delay until maximum frequency
-        tLastWakeTime = xTaskGetTickCount();
         vTaskDelayUntil( &tLastWakeTime, tFrequency );
         // calc and print framerate
         uint32_t now = xTaskGetTickCount();
@@ -541,6 +435,9 @@ static void distance_task(void *pvParameters) {
 extern "C" void app_main(void) {
     init_LED(); // initialize RGB-LED
     set_LED(255, 255, 0, 20);
+
+    // Only show warnings and errors at runtime (suppress INFO/DEBUG)
+    esp_log_level_set("*", ESP_LOG_WARN);
 
     esp_err_t ret = nimble_port_init();
     if (ret != ESP_OK) {
@@ -566,10 +463,7 @@ extern "C" void app_main(void) {
     set_LED(0, 255, 0, 10);
 
     // xTaskCreatePinnedToCore(distance_task,               "distance", 8192, NULL, 1, NULL, 0);
-    xTaskCreatePinnedToCore(camera_capture_task,            "camera",           8192*2, NULL, 20, NULL, 1);
-    vTaskDelay(3500 / portTICK_PERIOD_MS);
-    xTaskCreatePinnedToCore(classification_task,            "classification",   8192*2, NULL, 19, NULL, 0);
-    // xTaskCreatePinnedToCore(surface_classification_task,   "surface", 8192*2, NULL, 19, NULL, 1);
-    // vTaskDelay(400 / portTICK_PERIOD_MS);
-    // xTaskCreatePinnedToCore(takeover_classification_task,  "takeover", 8192*2, NULL, 19, NULL, 0);
+    xTaskCreatePinnedToCore(camera_capture_task,            "camera",           8192*2, NULL, 19, NULL, 0);
+    vTaskDelay(4500 / portTICK_PERIOD_MS);
+    xTaskCreatePinnedToCore(classification_task,            "classification",   8192*2, NULL, 20, &classification_task_handle, 1);
     }

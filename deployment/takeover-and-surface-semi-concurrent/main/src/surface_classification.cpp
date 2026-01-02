@@ -94,9 +94,9 @@ std::vector<dl::cls::result_t> run_surface_inference(const dl::image::img_t &inp
     delta = t1 - t0;
     ESP_LOGI("SURFACE", "inference in %8.0f us.\n", delta);
 
-    for (auto &res : results) {
-        ESP_LOGI("SURFACE", "category: %s, score: %f\n", res.cat_name, res.score);
-    }
+    // for (auto &res : results) {
+    //     ESP_LOGI("SURFACE", "category: %s, score: %f\n", res.cat_name, res.score);
+    // }
 
     return results;
 }

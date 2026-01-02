@@ -99,9 +99,9 @@ std::vector<dl::cls::result_t> run_takeover_inference(const dl::image::img_t &in
     delta = t1 - t0;
     ESP_LOGI("TAKEOVER", "inference in %8.0f us.\n", delta);
 
-    for (auto &res : results) {
-        ESP_LOGI("TAKEOVER", "category: %s, score: %f\n", res.cat_name, res.score);
-    }
+    // for (auto &res : results) {
+    //     ESP_LOGI("TAKEOVER", "category: %s, score: %f\n", res.cat_name, res.score);
+    // }
 
     return results;
 }
