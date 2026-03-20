@@ -14,6 +14,13 @@ static const char* TAG = "IMU";
 #define ICM20948_TEMP_OUT_H     0x39
 #define ICM20948_WHO_AM_I_VAL   0xEA
 
+// where to adjust the measurement range (±2g, ±4g, ±8g, ±16g) and corresponding sensitivity?
+#define ICM20948_ACCEL_CONFIG    0x14
+#define ICM20948_ACCEL_FS_SEL_2G  0x00
+#define ICM20948_ACCEL_FS_SEL_4G  0x08
+#define ICM20948_ACCEL_FS_SEL_8G  0x10
+#define ICM20948_ACCEL_FS_SEL_16G 0x18
+
 // I2C handles
 static i2c_master_bus_handle_t bus_handle = NULL;
 static i2c_master_dev_handle_t dev_handle = NULL;
@@ -79,6 +86,7 @@ esp_err_t imu_init(void) {
     // Wake up and enable sensors
     write_reg(ICM20948_PWR_MGMT_1, 0x01); // Auto select clock
     write_reg(ICM20948_PWR_MGMT_2, 0x00); // Enable accel + gyro
+    write_reg(ICM20948_ACCEL_CONFIG, ICM20948_ACCEL_FS_SEL_8G); // Set accel range to ±8g
     
     imu_ready = true;
     ESP_LOGI(TAG, "IMU initialized successfully");
