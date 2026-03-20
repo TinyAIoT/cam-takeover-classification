@@ -34,7 +34,7 @@ bool initialize_surface_model() {
         return false;
     }
     // surface_model->profile_module();
-    ESP_LOGW("SURFACE", "Preprocessor created, initializing postprocessor");
+    ESP_LOGI("SURFACE", "Preprocessor created, initializing postprocessor");
     
     // CREATE POSTPROCESSOR ONCE during initialization
     const int check = 5;
@@ -47,8 +47,8 @@ bool initialize_surface_model() {
         surface_model = nullptr;
         return false;
     }
-    
-    ESP_LOGW("SURFACE", "Surface model initialization complete");
+
+    ESP_LOGI("SURFACE", "Surface model initialization complete");
     return true;
 }
 
@@ -119,10 +119,16 @@ std::vector<dl::cls::result_t> run_surface_inference(const dl::image::img_t &inp
 
     t1 = esp_timer_get_time();
     delta = t1 - t0;
-    ESP_LOGI("SURFACE", "inference in %8.0f us.\n", delta);
+    ESP_LOGD("SURFACE", "inference in %8.0f us.\n", delta);
 
     for (auto &res : results) {
-        ESP_LOGE("SURFACE", "category: %s, score: %f\n", res.cat_name, res.score);
+        ESP_LOGD("SURFACE", "category: %s, score: %f\n", res.cat_name, res.score);
+    }
+    // log max score category (first one)
+    if (!results.empty()) {
+        ESP_LOGI("SURFACE", "Predicted category: %s, score: %f\n", results[0].cat_name, results[0].score);
+    } else {
+        ESP_LOGW("SURFACE", "No category met the score threshold.");
     }
 
     return results;

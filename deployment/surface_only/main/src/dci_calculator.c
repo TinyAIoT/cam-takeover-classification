@@ -36,7 +36,7 @@ esp_err_t dci_calculate_gravity_reference(const imu_data_t* imu_samples, int cou
     
     *gravity_ref = sum_magnitude / valid_samples;
     
-    ESP_LOGI(TAG, "Calculated gravity reference: %.3f g (from %d samples)", 
+    ESP_LOGD(TAG, "Calculated gravity reference: %.3f g (from %d samples)", 
              *gravity_ref, valid_samples);
     
     return ESP_OK;

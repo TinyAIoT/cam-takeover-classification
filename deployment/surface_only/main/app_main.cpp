@@ -139,7 +139,7 @@ static esp_err_t init_camera(void)
 
 static bool capture_and_process_image(dl::image::img_t &output_img)
 {
-    ESP_LOGI("CAM", "Capturing picture...");
+    ESP_LOGD("CAM", "Capturing picture...");
     camera_fb_t *pic = esp_camera_fb_get();
     if (!pic)
     {
@@ -156,7 +156,7 @@ static bool capture_and_process_image(dl::image::img_t &output_img)
     }
 
     // Use pic->buf to access the image
-    ESP_LOGI("CAM", "Picture taken! Height: %d, Width: %d, Len: %zu", pic->height, pic->width, pic->len);
+    ESP_LOGD("CAM", "Picture taken! Height: %d, Width: %d, Len: %zu", pic->height, pic->width, pic->len);
 
     // Free previous image data (if any)
     if (output_img.data)
@@ -216,7 +216,7 @@ static void sensor_task(void *pvParameters)
     for (;;)
     {
         // Phase 1: Collect IMU readings
-        ESP_LOGI("SENSOR", "=== Cycle %d: Collecting IMU readings ===", ++cycle_count);
+        ESP_LOGD("SENSOR", "=== Cycle %d: Collecting IMU readings ===", ++cycle_count);
 
         uint64_t imu_collection_start = esp_timer_get_time();
 
@@ -250,13 +250,13 @@ static void sensor_task(void *pvParameters)
         uint64_t imu_collection_end = esp_timer_get_time();
         uint64_t imu_collection_time = imu_collection_end - imu_collection_start;
 
-        ESP_LOGI("SENSOR", "Collected %d IMU readings in %llu ms",
+        ESP_LOGD("SENSOR", "Collected %d IMU readings in %llu ms",
                  imu_count, imu_collection_time / 1000);
 
         // Phase 2: Signal camera & classification task and continue IMU collection
         if (classification_task_handle && classification_ready)
         {
-            ESP_LOGI("SENSOR", "=== Phase 2: Notifying classification task ===");
+            ESP_LOGD("SENSOR", "=== Phase 2: Notifying classification task ===");
             BaseType_t result = xTaskNotifyGive(classification_task_handle);
             if (result != pdPASS)
             {
@@ -278,14 +278,14 @@ static void sensor_task(void *pvParameters)
             esp_err_t dci_ret = dci_calculate(imu_buffer, imu_count, gravity_ref, &dci_result);
             uint64_t dci_calculate_end = esp_timer_get_time();
             // Log timing information in microseconds for more precision
-            ESP_LOGI("SENSOR", "DCI calculation took %llu us", dci_calculate_end - dci_calculate_start);
+            ESP_LOGD("SENSOR", "DCI calculation took %llu us", dci_calculate_end - dci_calculate_start);
             if (dci_ret == ESP_OK && dci_result.valid)
             {
-                ESP_LOGI("SENSOR", "DCI Analysis (Z-axis downward):");
+                ESP_LOGD("SENSOR", "DCI Analysis (Z-axis downward):");
                 ESP_LOGI("SENSOR", "  - DCI Value: %.3f", dci_result.dci_value);
-                ESP_LOGI("SENSOR", "  - Samples: %d total, %d above threshold (1g)",
+                ESP_LOGD("SENSOR", "  - Samples: %d total, %d above threshold (1g)",
                          dci_result.total_samples, dci_result.above_threshold);
-                ESP_LOGI("SENSOR", "  - Surface roughness: %s",
+                ESP_LOGD("SENSOR", "  - Surface roughness: %s",
                          dci_result.dci_value > 2.0f ? "Smooth" : dci_result.dci_value > 1.0f ? "Moderate"
                                                                                               : "Rough");
             }
@@ -314,7 +314,7 @@ static void classification_task(void *pvParameters)
 
     // Signal that classification is ready
     classification_ready = true;
-    ESP_LOGI("CLASSIFY", "Surface model initialized, ready for classification");
+    ESP_LOGD("CLASSIFY", "Surface model initialized, ready for classification");
 
     int iteration_count = 0;
 
@@ -323,7 +323,7 @@ static void classification_task(void *pvParameters)
         // Wait for notification from camera task that a new frame is available
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        ESP_LOGI("CLASSIFY", "=== Camera capture phase ===");
+        ESP_LOGD("CLASSIFY", "=== Camera capture phase ===");
 
         // Sub-phase 2a: Camera capture
         uint64_t camera_start = esp_timer_get_time();
@@ -343,7 +343,7 @@ static void classification_task(void *pvParameters)
 
         camera_fps.update();
 
-        ESP_LOGI("CLASSIFY", "Camera capture completed in %llu ms",
+        ESP_LOGD("CLASSIFY", "Camera capture completed in %llu ms",
                  timing_stats.camera_capture_us / 1000);
 
         // Phase 3: Publish image for classification (atomic swap)
@@ -355,7 +355,7 @@ static void classification_task(void *pvParameters)
         iteration_count++;
         classification_fps.update();
 
-        ESP_LOGI("CLASSIFY", "=== Classification iteration %d ===", iteration_count);
+        ESP_LOGD("CLASSIFY", "=== Classification iteration %d ===", iteration_count);
 
         // Get current buffer index atomically
         int idx;
@@ -384,14 +384,14 @@ static void classification_task(void *pvParameters)
         }
         else
         {
-            ESP_LOGI("CLASSIFY", "Surface processing succeeded (took %lu ms)", elapsed_ms);
+            ESP_LOGD("CLASSIFY", "Surface processing succeeded (took %lu ms)", elapsed_ms);
             set_LED(0, 255, 0, 10); // Green - success
         }
 
         // Log performance periodically
         if (iteration_count % 5 == 0)
         {
-            ESP_LOGI("CLASSIFY", "Performance - Cam: %.1f fps, IMU: %.1f fps, Classify: %.1f fps",
+            ESP_LOGD("CLASSIFY", "Performance - Cam: %.1f fps, IMU: %.1f fps, Classify: %.1f fps",
                      camera_fps.get_current(), imu_fps.get_current(), classification_fps.get_current());
         }
     }
@@ -416,9 +416,9 @@ extern "C" void app_main(void)
 
     // Only show warnings and errors at runtime (suppress INFO/DEBUG)
     // Set logging levels
-    esp_log_level_set("*", ESP_LOG_INFO);
-    esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
-    esp_log_level_set("CLASSIFY", ESP_LOG_DEBUG);
+    // esp_log_level_set("*", ESP_LOG_INFO);
+    // esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
+    // esp_log_level_set("CLASSIFY", ESP_LOG_DEBUG);
 
     // Initialize NVS (if not already done)
     esp_err_t nvs_ret = nvs_flash_init();

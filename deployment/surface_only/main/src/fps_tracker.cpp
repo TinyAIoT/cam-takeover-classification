@@ -27,7 +27,7 @@ void FPSTracker::update() {
             
             // Log current and average FPS
             float avg = sum / count;
-            ESP_LOGW(tag, "Current: %.2f FPS, Avg (last %d): %.2f FPS", fps, count, avg);
+            ESP_LOGD(tag, "Current: %.2f FPS, Avg (last %d): %.2f FPS", fps, count, avg);
         }
     }
     last_time = now;
