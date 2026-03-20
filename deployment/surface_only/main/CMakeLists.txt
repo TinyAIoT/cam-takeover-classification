@@ -5,10 +5,13 @@ if(CONFIG_MODEL_DENSENET)
     message(WARNING "DENSENET MIGHT BE TO BIG TO FIT INTO MEMORY")
 endif()
 set(src_dirs        ./
-                    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+                    ${CMAKE_CURRENT_SOURCE_DIR}/src
+                    ${CMAKE_CURRENT_SOURCE_DIR}/libraries/cybergear-robotics__icm20948)
+
 
 set(include_dirs    ./
-                    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+                    ${CMAKE_CURRENT_SOURCE_DIR}/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/libraries/cybergear-robotics__icm20948)
 
 list(APPEND requires    esp32_s3_eye_noglib
                          esp_lcd
