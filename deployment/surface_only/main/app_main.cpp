@@ -291,7 +291,7 @@ static void sensor_task(void *pvParameters)
             }
             else
             {
-                ESP_LOGW("SENSOR", "DCI calculation failed: not enough dynamic acceleration");
+                ESP_LOGI("SENSOR", "DCI calculation failed: not enough dynamic acceleration");
             }
         }
 

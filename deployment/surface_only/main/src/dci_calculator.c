@@ -93,7 +93,7 @@ esp_err_t dci_calculate(const imu_data_t* imu_samples, int count, float gravity_
         result->dci_value = 0.0f;
         result->valid = false;
 
-        ESP_LOGW(TAG, "DCI invalid: only %d samples above threshold (1g) (need ≥%d)", 
+        ESP_LOGD(TAG, "DCI invalid: only %d samples above threshold (1g) (need ≥%d)", 
                  above_threshold_count, DCI_MIN_SAMPLES);
     }
     
