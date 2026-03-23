@@ -11,8 +11,9 @@ extern "C" {
 #endif
 
 // DCI configuration
+#define DCI_ACCEL_LSB_TO_G      (1.0f / 4096.0f)   // For ±8g range, 4096 LSB/g
 #define DCI_GRAVITY_THRESHOLD   1.0f                // 1g threshold
-#define DCI_MIN_SAMPLES         3                   // Minimum samples for valid DCI (arbitrary, can be tuned)
+#define DCI_MIN_SAMPLES         5                   // Minimum samples for valid DCI (arbitrary, can be tuned)
 
 // DCI result structure
 typedef struct {
