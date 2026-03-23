@@ -1,0 +1,279 @@
+{
+    "createBoxAddCustomTag": "Eigene Gruppentags hinzufügen",
+    "createBoxCustomTag": "Eigener Gruppentag",
+    "createBoxCustomTagHelper": "Du kannst Tags mit Kommas trennen",
+    "@@locale": "de",
+    "generalLoading": "Lädt...",
+    "generalError": "Fehler",
+    "generalErrorWithDescription": "Fehler: {error}",
+    "@generalErrorWithDescription": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+
+    "generalCancel": "Abbrechen",
+    "generalCreate": "Erstellen",
+    "generalOk": "Ok",
+    "generalSave": "Speichern",
+    "generalDelete": "Löschen",
+    "generalEdit": "Bearbeiten",
+    "generalAdd": "Hinzufügen",
+    "generalClose": "Schließen",
+    "reloadConfiguration": "Konfiguration neu laden",
+    "generalUpload": "Hochladen",
+    "generalPrivacyZones": "Privatzonen",
+    "generalSettings": "Einstellungen",
+    "generalShare": "Teilen",
+    "generalTrackDuration": "{hours} Std. {minutes} Min.",
+    "@generalTrackDuration": {
+        "placeholders": {
+            "hours": {
+                "type": "int"
+            },
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "generalTrackDurationShort": "{hours}:{minutes} Std.",
+    "@generalTrackDurationShort": {
+        "placeholders": {
+            "hours": {
+                "type": "String"
+            },
+            "minutes": {
+                "type": "String"
+            }
+        }
+    },
+    "generalTrackDistance": "{distance} km",
+    "@generalTrackDistance": {
+        "placeholders": {
+            "distance": {
+                "type": "String"
+            }
+        }
+    },
+    "generalExport": "Exportieren",
+    "generalLogin": "Anmelden",
+    "generalLogout": "Abmelden",
+    "generalRegister": "Registrieren",
+    "generalProceed": "Fortfahren",
+    "homeBottomBarHome": "Start",
+    "homeBottomBarTracks": "Tracks",
+    "tracksAppBarSumTracks": "{count, plural, =0{Keine Tracks} =1{1 Track} other{{count} Tracks}}",
+    "tracksNoTracks": "Keine Tracks verfügbar",
+    "tracksTrackDeleted": "Track gelöscht",
+    "openSenseMapLogin": "Mit openSenseMap anmelden",
+    "openSenseMapLoginDescription": "Melde dich an, um deine Daten zu teilen.",
+    "openSenseMapLogout": "Ausloggen",
+    "openSenseMapEmail": "E-Mail",
+    "openSenseMapPassword": "Passwort",
+    "openSenseMapEmailErrorEmpty": "E-Mail darf nicht leer sein",
+    "openSenseMapEmailErrorInvalid": "Ungültige E-Mail-Adresse",
+    "openSenseMapPasswordErrorEmpty": "Passwort darf nicht leer sein",
+    "openSenseMapLoginFailed": "Anmeldung fehlgeschlagen",
+    "openSenseMapRegisterName": "Benutzername",
+    "openSenseMapRegisterNameErrorEmpty": "Benutzername darf nicht leer sein",
+    "openSenseMapRegisterPasswordConfirm": "Passwort bestätigen",
+    "openSenseMapRegisterPasswordConfirmErrorEmpty": "Passwort darf nicht leer sein",
+    "openSenseMapRegisterPasswordErrorMismatch": "Passwörter stimmen nicht überein",
+    "openSenseMapRegisterPasswordErrorCharacters": "Passwort muss mindestens 8 Zeichen enthalten",
+    "openSenseMapRegisterFailed": "Registrierung fehlgeschlagen",
+    "connectionButtonConnect": "Verbinden",
+    "connectionButtonDisconnect": "Trennen",
+    "connectionButtonConnecting": "Verbinden...",
+    "connectionButtonReconnecting": "Erneut verbinden...",
+    "connectionButtonStart": "Start",
+    "connectionButtonStop": "Stop",
+    "bleDeviceSelectTitle": "Tippen, um zu verbinden",
+    "noBleDevicesFound": "Keine senseBoxen gefunden. Bitte stelle sicher, dass deine senseBox eingeschaltet ist, tippe dann außerhalb dieses Fensters und versuche es erneut.",
+    "selectOrCreateBox": "senseBox wählen oder erstellen",
+    "createBoxTitle": "senseBox:bike erstellen",
+    "createBoxModel": "Modell",
+    "createBoxModelErrorEmpty": "Bitte wähle ein Modell",
+    "createBoxName": "Name",
+    "createBoxNameError": "Name muss zwischen 2 und 50 Zeichen lang sein",
+    "createBoxGeolocationCurrentPosition": "Deine aktuelle Position wird verwendet",
+    "openSenseMapBoxSelectionNoBoxes": "Keine senseBox verfügbar oder Konfiguration nicht geladen",
+    "openSenseMapBoxSelectionCreateHint": "Erstelle eine mit dem '+' Button",
+    "openSenseMapBoxSelectionUnnamedBox": "Unbenannte senseBox",
+    "openSenseMapBoxSelectionIncompatible": "Nicht kompatibel mit senseBox:bike",
+    "openSenesMapRegisterAcceptTermsPrefix": "Ich akzeptiere die",
+    "openSenseMapRegisterAcceptTermsPrivacy": "Datenschutzbestimmungen",
+    "openSenseMapRegisterAcceptTermsError": "Sie müssen die Datenschutzbestimmungen akzeptieren",
+    "settingsGeneral": "Allgemeine",
+    "settingsOther": "Andere",
+    "settingsVibrateOnDisconnect": "Vibration bei Verbindungsabbruch",
+    "settingsUploadMode": "Upload-Modus",
+    "settingsUploadModeDirect": "Direkter Upload (Beta)",
+    "settingsUploadModePostRide": "Upload nach der Fahrt",
+    "settingsUploadModeDescription": "Wählen Sie, wann Ihre Daten während der Aufzeichnung hochgeladen werden sollen",
+    "settingsUploadModeCurrent": "Aktuell: {mode}",
+    "@settingsUploadModeCurrent": {
+        "placeholders": {
+            "mode": {
+                "type": "String"
+            }
+        }
+    },
+    "settingsUploadModePostRideTitle": "Daten nach Beendigung der Aufzeichnung hochladen",
+    "settingsUploadModePostRideDescription": "• Daten werden lokal während der Aufzeichnung gespeichert\n• Upload erfolgt auf einmal beim Beenden\n• Zuverlässiger und stabiler\n• Verbraucht weniger Akku während der Aufzeichnung",
+    "settingsUploadModeDirectTitle": "Daten in Echtzeit während der Aufzeichnung hochladen (experimentell)",
+    "settingsUploadModeDirectDescription": "• Daten werden sofort hochgeladen, während sie gesammelt werden\n• Echtzeit-Datenaustausch (experimentell)\n• Erfordert stabile Internetverbindung\n• Kann mehr Akku während der Aufzeichnung verbrauchen",
+    "settingsAbout": "Über die App",
+    "settingsPrivacyPolicy": "Datenschutz",
+    "settingsVersion": "Version: {versionNumber}",
+    "@settingsVersion": {
+        "placeholders": {
+            "versionNumber": {
+                "type": "String"
+            }
+        }
+    },
+    "settingsContact": "Hilfe oder Feedback?",
+    "settingsEmail": "E-Mail",
+    "settingsGithub": "GitHub issue",
+    "privacyZonesStart": "Tippen Sie auf die Karte, um mit dem Zeichnen einer Zone zu beginnen. Tippen Sie auf das Häkchen, um den Vorgang zu beenden.",
+    "privacyZonesDelete": "Tippen Sie auf eine Zone, um sie zu löschen. Tippen Sie auf das Häkchen, um den Vorgang zu beenden.",
+    "trackDetailsPermissionsError": "Keine Berechtigung zum Speichern der Datei auf externem Speicher.",
+    "trackDetailsFileSaved": "Die CSV-Datei wird im Ordner Downloads gespeichert.",
+    "trackDetailsExport": "CSV-Export von Trackdaten.",
+  
+    "trackDetailsLoadingError": "Fehler beim Laden des Tracks.",
+    "trackDetailsNoTrackData": "Kein Track verfügbar.",
+    "trackDelete": "Track löschen",
+    "trackDeleteConfirmation": "Wollen Sie diesen Track wirklich löschen?",
+    "sensorTemperature": "Temperatur",
+    "sensorHumidity": "Rel. Luftfeuchtigkeit",
+    "sensorFinedustPM10": "Feinstaub PM10",
+    "sensorFinedustPM4": "Feinstaub PM4",
+    "sensorFinedustPM25": "Feinstaub PM2,5",
+    "sensorFinedustPM1": "Feinstaub PM1",
+    "sensorDistance": "Abstand Links",
+    "sensorDistanceRight": "Abstand Rechts",
+    "sensorOvertaking": "Überholmanöver",
+    "sensorOvertakingShort": "Überholen",
+    "sensorSurface": "Oberfläche",
+    "sensorSurfaceAsphalt": "Oberfläche Asphalt",
+    "sensorSurfaceAsphaltShort": "Asphalt",
+    "sensorSurfaceSett": "Oberfläche Pflasterstein",
+    "sensorSurfaceSettShort": "Pflasterstein",
+    "sensorSurfaceCompacted": "Oberfläche verdichtet",
+    "sensorSurfaceCompactedShort": "Verdichtet",
+    "sensorSurfacePaving": "Oberfläche Pflasterung",
+    "sensorSurfacePavingShort": "Pflasterung",
+    "sensorSurfaceStanding": "Stehend",
+    "sensorSurfaceAnomaly": "Oberfl. Anomalie",
+    "sensorSpeed": "Geschwindigkeit",
+    "sensorAccelerationX": "Beschleunigung X",
+    "sensorAccelerationY": "Beschleunigung Y",
+    "sensorAccelerationZ": "Beschleunigung Z",
+    "sensorGPSLat": "GPS Breitengrad",
+    "sensorGPSLong": "GPS Längengrad",
+    "sensorGPSSpeed": "GPS Geschwindigkeit",
+    "sensorGPSError": "Kein GPS-Fix",
+    "sensorAcceleration": "Beschleunigung",
+    "sensorFinedust": "Feinstaub",
+    "sensorDistanceShort": "Abstand",
+    "campaignLoadError": "Die Liste der Kampagnen konnte nicht geladen werden.",
+    "boxConfigurationLoadError": "Fehler beim Laden der Box-Konfigurationen.",
+    "selectCampaign": "Kampagne auswählen",
+    "noCampaignsAvailable": "Keine Kampagnen verfügbar",
+    "loginScreenTitle": "openSenseMap Konto",
+    "connectionButtonEnableBluetooth": "Bluetooth aktivieren",
+    "errorNoLocationAccess": "Standortdienste sind deaktiviert oder der Zugriff ist verweigert. Um Tracks aufzuzeichnen, aktivieren Sie bitte die Standortdienste und erlauben Sie der App in den Telefoneinstellungen den Zugriff auf Ihren Standort.",
+    "errorNoScanAccess": "Um eine Verbindung mit senseBox herzustellen, erlauben Sie bitte der App in den Telefoneinstellungen, nach Geräten in der Nähe zu scannen.",
+    "errorNoSenseBoxSelected": "Um den Upload von Sensordaten in die Cloud zu ermöglichen, melden Sie sich bitte in Ihrem openSenseMap-Konto an und wählen Sie die Box aus.",
+    "trackUploadLoginSelectHint": "Bitte melde dich an und wähle eine senseBox zum Hochladen aus.",
+    "uploadRequirementsTitle": "Upload nicht möglich",
+    "uploadPostRideRequirementsMessage": "Um deine Fahrt hochzuladen, melde dich bei deinem openSenseMap-Konto an, wähle eine senseBox aus und öffne dann die Track-Übersicht und tippe auf die Upload-Schaltfläche oben rechts.",
+    "loginRequiredMessage": "Anmelden um Sensordaten zu teilen",
+    "errorExportDirectoryAccess": "Bitte erlaube dieser App in den Telefoneinstellungen den Zugriff auf den externen Speicher.",
+    "errorLoginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten und versuchen Sie es später erneut.",
+    "errorRegistrationFailed": "Registrierung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten und versuchen Sie es später erneut.",
+    "errorReasonPrefix": "Grund:",
+    "errorBleConnectionFailed": "Die Verbindung zur senseBox wurde unterbrochen. Bitte stellen Sie sicher, dass Bluetooth aktiviert ist und die senseBox eingeschaltet ist.",
+    "errorUploadFailed": "Daten-Upload fehlgeschlagen. Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.",
+    "errorPermanentAuthentication": "Authentifizierung dauerhaft fehlgeschlagen. Bitte melden Sie sich an, um Daten hochzuladen.",
+    "selectCsvFormat": "CSV-Format auswählen",
+    "regularCsv": "Standard CSV",
+    "openSenseMapCsv": "openSenseMap CSV",
+    "settingsDeleteAllData": "Alle Daten löschen",
+    "settingsDeleteAllDataConfirmation": "Sind Sie sicher, dass Sie alle Daten löschen möchten? Diese Aktion ist nicht umkehrbar.",
+    "settingsDeleteAllDataSuccess": "Alle Daten wurden erfolgreich gelöscht.",
+    "settingsDeleteAllDataError": "Fehler beim Löschen aller Daten. Bitte versuchen Sie es erneut.",
+    "accountManagement": "Kontoverwaltung",
+    "deleteAllHint": "Dies löscht alle Ihre Tracks aus der App.",
+    "generalConfirmation": "Bestätigung",
+    "privacyPolicyAccept": "Ich habe die Datenschutzerklärung gelesen und stimme ihr zu.",
+    "trackNoGeolocations": "Keine Positionsdaten für diesen Track verfügbar.",
+    "tracksAppBarTitle": "Deine Tracks",
+    "loadMore": "Mehr laden",
+    "tracksStatisticsTitle": "Track-Statistiken",
+    "tracksStatisticsTotalData": "Gesamtdaten",
+    "tracksStatisticsThisWeek": "Diese Woche",
+    "tracksStatisticsRidesInfo": "Abgeschlossene Fahrten",
+    "tracksStatisticsDistanceInfo": "zurückgelegte Strecke",
+    "tracksStatisticsTimeInfo": "Fahrzeit",
+    "trackStatistics": "Track-Statistiken",
+    "uploadProgressTitle": "Track Upload",
+    "uploadProgressPreparing": "Upload wird vorbereitet...",
+    "uploadProgressUploading": "Track wird hochgeladen...",
+    "uploadProgressInfo": "Bitte schließen Sie die App während des Uploads nicht. Je nach Länge Ihres Tracks kann dies etwas dauern.\n\nFalls Sie Ihre Track-Daten später hochladen möchten, können Sie das in der Trackübersicht tun.",
+    "uploadProgressRetrying": "Upload wird wiederholt...",
+    "uploadProgressCompleted": "Upload erfolgreich",
+    "uploadProgressFailed": "Upload fehlgeschlagen",
+    "uploadProgressAuthenticationFailed": "Authentifizierung erforderlich",
+    "uploadProgressChunks": "{completed} von {total, plural, =0{0 Blöcken} =1{1 Block} other{{total} Blöcken}} hochgeladen",
+    "@uploadProgressChunks": {
+        "placeholders": {
+            "completed": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "uploadProgressPercentage": "{percentage}% abgeschlossen",
+    "@uploadProgressPercentage": {
+        "placeholders": {
+            "percentage": {
+                "type": "int"
+            }
+        }
+    },
+    "uploadProgressAuthenticationError": "Bitte melden Sie sich an, um Daten hochzuladen.",
+    "uploadProgressNetworkError": "Netzwerkverbindung fehlgeschlagen. Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.",
+    "uploadProgressGenericError": "Upload fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "uploadConfirmTitle": "Track-Daten hochladen",
+    "uploadConfirmMessage": "Möchten Sie Ihre Track-Daten jetzt oder später hochladen?",
+    "uploadConfirmUploadNow": "Jetzt hochladen",
+    "trackStatusUploaded": "Hochgeladen",
+    "trackStatusUploadedAt": "Hochgeladen am {date}",
+    "@trackStatusUploadedAt": {
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+      "trackDirectUploadInfo": "Diese Track-Daten wurden in Echtzeit während deiner Fahrt hochgeladen. Falls du sie erneut hochladen möchtest, kannst du den Upload-Button oben verwenden.",
+  "trackUploadAttempts": "Upload-Versuche",
+  "trackLastAttempt": "Letzter Versuch",
+  "trackStatus": "Status",
+  "trackDirectUploadAuthFailed": "Dieser Track konnte nicht in Echtzeit hochgeladen werden, da du nicht angemeldet warst. Bitte melde dich an und versuche den Upload erneut.",
+    "trackStatusNotUploaded": "Nicht hochgeladen",
+    "trackStatusUploadFailed": "Upload fehlgeschlagen",
+    "trackFilterAll": "Alle",
+    "trackFilterUnuploaded": "Nicht hochgeladen",
+    "trackUploadRetryFailed": "Upload-Wiederholung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "errorTrackNoGeolocations": "Track hat keine Geolokationsdaten und kann nicht hochgeladen werden.",
+    "openSenseMapInfoText": "Deine senseBox:bike-Daten werden auf openSenseMap geteilt und tragen zur Bürgerwissenschaft und Umweltüberwachung bei.",
+    "openSenseMapInfoLink": "Besuche openSenseMap.org",
+    "loginForgotPasswordInfo": "Wenn du dein Passwort vergessen hast, gehe bitte zu openSenseMap, klicke auf \"Anmelden\" und \"Vergessen?\"."
+}
