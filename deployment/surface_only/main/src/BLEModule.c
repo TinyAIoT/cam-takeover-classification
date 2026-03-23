@@ -258,18 +258,6 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
                 .access_cb = gatt_svr_chr_access_surface_classification,
                 .val_handle = &surface_classification_hrm_handle,
                 .flags = BLE_GATT_CHR_F_NOTIFY,
-            // }, {
-            //     /* Characteristic: takeover classification */
-            //     .uuid = BLE_UUID128_DECLARE(GATT_TAKEOVER_CLASSIFICATION_UUID),
-            //     .access_cb = gatt_svr_chr_access_takeover_classification,
-            //     .val_handle = &takeover_classification_hrm_handle,
-            //     .flags = BLE_GATT_CHR_F_NOTIFY,
-            // }, {
-            //     /* Characteristic: distance */
-            //     .uuid = BLE_UUID128_DECLARE(GATT_DISTANCE_UUID),
-            //     .access_cb = gatt_svr_chr_access_distance,
-            //     .val_handle = &distance_hrm_handle,
-            //     .flags = BLE_GATT_CHR_F_NOTIFY,
             }, {
                 /* Characteristic: DCI */
                 .uuid = BLE_UUID128_DECLARE(GATT_DCI_UUID),
