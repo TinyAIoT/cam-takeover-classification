@@ -5,6 +5,7 @@
 
 
 static const char* TAG = "DCI";
+#define DCI_ACCEL_LSB_TO_G(sensitivity) (1.0f / (sensitivity))
 
 // Calculate gravity reference from IMU data (assuming some stationary periods)
 esp_err_t dci_calculate_gravity_reference(const imu_data_t* imu_samples, int count, float* gravity_ref) {
@@ -21,9 +22,9 @@ esp_err_t dci_calculate_gravity_reference(const imu_data_t* imu_samples, int cou
         if (!imu_samples[i].valid) continue;
         
         // Convert to g-force and calculate magnitude
-        float ax = imu_samples[i].accel_x * DCI_ACCEL_LSB_TO_G;
-        float ay = imu_samples[i].accel_y * DCI_ACCEL_LSB_TO_G;
-        float az = imu_samples[i].accel_z * DCI_ACCEL_LSB_TO_G;
+        float ax = imu_samples[i].accel_x * DCI_ACCEL_LSB_TO_G(imu_get_accel_sensitivity());
+        float ay = imu_samples[i].accel_y * DCI_ACCEL_LSB_TO_G(imu_get_accel_sensitivity());
+        float az = imu_samples[i].accel_z * DCI_ACCEL_LSB_TO_G(imu_get_accel_sensitivity());
         
         float magnitude = sqrtf(ax*ax + ay*ay + az*az);
         sum_magnitude += magnitude;
@@ -62,18 +63,18 @@ esp_err_t dci_calculate(const imu_data_t* imu_samples, int count, float gravity_
     for (int i = 0; i < count; i++) {
         if (!imu_samples[i].valid) continue;
         
-        // Convert Z-axis acceleration to g-force (vertical acceleration)
-        float az_g = imu_samples[i].accel_z * DCI_ACCEL_LSB_TO_G;
+        // Convert X-axis acceleration to g-force (vertical acceleration in our setup)
+        float ax_g = imu_samples[i].accel_x * DCI_ACCEL_LSB_TO_G(imu_get_accel_sensitivity());
         
         // Remove gravity bias and get absolute vertical acceleration
         // float vertical_accel = fabsf(az_g) - gravity_ref;
         
         // Check if above 1g threshold
-        if (az_g > DCI_GRAVITY_THRESHOLD) {
-            sum_squared_vertical += az_g * az_g;
+        if (fabsf(ax_g) > DCI_GRAVITY_THRESHOLD) {
+            sum_squared_vertical += ax_g * ax_g;
             above_threshold_count++;
-            ESP_LOGD(TAG, "Sample %d: az=%.3f g (above threshold)", 
-                     i, az_g);
+            ESP_LOGD(TAG, "Sample %d: ax=%.3f g (above threshold)", 
+                     i, ax_g);
         }
         
         valid_samples++;
@@ -91,10 +92,10 @@ esp_err_t dci_calculate(const imu_data_t* imu_samples, int count, float gravity_
         ESP_LOGD(TAG, "DCI calculated: %.3f (from %d/%d samples above threshold (1g))", 
                  result->dci_value, above_threshold_count, valid_samples);
     } else {
-        result->dci_value = 0.0f;
+        result->dci_value = -1.0f;
         result->valid = false;
 
-        ESP_LOGW(TAG, "DCI invalid: only %d samples above threshold (1g) (need ≥%d)", 
+        ESP_LOGD(TAG, "DCI invalid: only %d samples above threshold (1g) (need ≥%d)",
                  above_threshold_count, DCI_MIN_SAMPLES);
     }
 
