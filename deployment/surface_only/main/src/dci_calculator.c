@@ -76,11 +76,11 @@ esp_err_t dci_calculate(const imu_data_t* imu_samples, int count, float gravity_
         // float vertical_accel = fabsf(az_g) - gravity_ref;
         
         // Check if above 1g threshold
-        if (fabsf(ax_g) > DCI_GRAVITY_THRESHOLD) {
-            sum_squared_vertical += ax_g * ax_g;
+        if (az_g > DCI_GRAVITY_THRESHOLD) {
+            sum_squared_vertical += az_g * az_g;
             above_threshold_count++;
-            ESP_LOGD(TAG, "Sample %d: ax=%.3f g (above threshold)", 
-                     i, ax_g);
+            ESP_LOGD(TAG, "Sample %d: az=%.3f g (above threshold)", 
+                     i, az_g);
         }
         
         valid_samples++;
