@@ -1,20 +1,25 @@
-# Surface and Takeover classification
+# Surface Type Classification and Roughness Detection Deployment
+
 ![system design](../../figures/system_design.png)
 
-The camera captures an image and then triggers surface and takeover classification in parallel. Current framerate is 6.67 Hz. 
+Parallel acceleration measurement at 100Hz, and DCI calculation and surface classification at 5 Hz on ESP32-S3.
 
-In order for the classification task to run indefinitely the watchdog timer has to be disabled in the settings.
+## System Overview
 
-Also the ToF will not be initialized correctly if the device is not powered off after a restart.
+**Dual-core processing:**
+- **Core 0**: Camera capture and surface classification (5 Hz)
+- **Core 1**: IMU data collection (20 samples at 100 Hz)
 
-## TODO
+**Hardware:**
+- MCU: ESP32-S3
+- Camera: OV2640 (QVGA, RGB565)
+- IMU: ICM20948 for Dynamic Comfort Index calculation
 
-- [ ] second ToF
-- [ ] acceleration sensor?
-- [ ] better models
-    - more data
-    - [x] grayscale
-- refactoring
-    - [ ] sensor class (+ class for classifications?)
-    - [ ] clean up BLE
-    - [ ] subfolders (somehow thats not trivial... I have issues with the cmake)
+## Setup Requirements
+
+## Performance
+
+- Camera: 5 Hz capture rate (can be increased if necessary)
+- IMU: 100 Hz sampling
+- Classification: ~120-130ms latency per frame
+- BLE transmission to sensBox:bike app
