@@ -8,10 +8,11 @@
 #include "dci_calculator.h"
 #include "esp_log.h"
 #include <math.h>
+#include "BLEModule.h"
 
 
 static const char* TAG = "DCI";
-#define DCI_ACCEL_LSB_TO_G(sensitivity) (1.0f / (sensitivity))  // Dynamic based on range
+#define DCI_ACCEL_LSB_TO_G(sensitivity) (1.0f / (sensitivity))
 
 // Calculate gravity reference from IMU data (assuming some stationary periods)
 esp_err_t dci_calculate_gravity_reference(const imu_data_t* imu_samples, int count, float* gravity_ref) {
@@ -30,7 +31,7 @@ esp_err_t dci_calculate_gravity_reference(const imu_data_t* imu_samples, int cou
         float ax = imu_samples[i].accel_x * DCI_ACCEL_LSB_TO_G(imu_get_accel_sensitivity());
         float ay = imu_samples[i].accel_y * DCI_ACCEL_LSB_TO_G(imu_get_accel_sensitivity());
         float az = imu_samples[i].accel_z * DCI_ACCEL_LSB_TO_G(imu_get_accel_sensitivity());
-
+        
         float magnitude = sqrtf(ax*ax + ay*ay + az*az);
         sum_magnitude += magnitude;
         valid_samples++;
@@ -67,10 +68,10 @@ esp_err_t dci_calculate(const imu_data_t* imu_samples, int count, float gravity_
     
     for (int i = 0; i < count; i++) {
         if (!imu_samples[i].valid) continue;
-
-        // Convert X-axis acceleration to g-force (horizontal acceleration)
+        
+        // Convert X-axis acceleration to g-force (vertical acceleration in our setup)
         float ax_g = imu_samples[i].accel_x * DCI_ACCEL_LSB_TO_G(imu_get_accel_sensitivity());
-
+        
         // Remove gravity bias and get absolute vertical acceleration
         // float vertical_accel = fabsf(az_g) - gravity_ref;
         
@@ -97,12 +98,14 @@ esp_err_t dci_calculate(const imu_data_t* imu_samples, int count, float gravity_
         ESP_LOGD(TAG, "DCI calculated: %.3f (from %d/%d samples above threshold (1g))", 
                  result->dci_value, above_threshold_count, valid_samples);
     } else {
-        result->dci_value = 0.0f;
+        result->dci_value = -1.0f;
         result->valid = false;
 
-        ESP_LOGD(TAG, "DCI invalid: only %d samples above threshold (1g) (need ≥%d)", 
+        ESP_LOGD(TAG, "DCI invalid: only %d samples above threshold (1g) (need ≥%d)",
                  above_threshold_count, DCI_MIN_SAMPLES);
     }
+
+    notify_dci(&result->dci_value);
     
     return ESP_OK;
 }

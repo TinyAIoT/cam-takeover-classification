@@ -32,8 +32,7 @@ static uint8_t addr_type;
 static const char *manuf_name = "senseBox Eye";
 static const char *model_num = "1.1";
 uint16_t surface_classification_hrm_handle;
-uint16_t takeover_classification_hrm_handle;
-uint16_t distance_hrm_handle;
+uint16_t dci_hrm_handle;
 
 static const char *device_name = "senseBox:bike";
 static bool notify_state;
@@ -43,10 +42,7 @@ static uint16_t conn_handle;
 static int gatt_svr_chr_access_surface_classification(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg);
 
-static int gatt_svr_chr_access_takeover_classification(uint16_t conn_handle, uint16_t attr_handle,
-                               struct ble_gatt_access_ctxt *ctxt, void *arg);
-
-static int gatt_svr_chr_access_distance(uint16_t conn_handle, uint16_t attr_handle,
+static int gatt_svr_chr_access_dci(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg);
 
 int gap_event(struct ble_gap_event *event, void *arg)
@@ -169,7 +165,7 @@ void notify_surface_classification(float values[5])
     }
 }
 
-void notify_takeover_classification(float values[1])
+void notify_dci(float values[1])
 {
     int rc;
 
@@ -184,31 +180,9 @@ void notify_takeover_classification(float values[1])
             return;
         }
 
-        rc = ble_gattc_notify_custom(conn_handle, takeover_classification_hrm_handle, om);
+        rc = ble_gattc_notify_custom(conn_handle, dci_hrm_handle, om);
         if (rc != 0) {
-            MODLOG_DFLT(ERROR, "error sending takeover classificationnotification; rc=%d\n", rc);
-        }
-    }
-}
-
-void notify_distance(float values[1])
-{
-    int rc;
-
-    if (notify_state) {
-        // convert to IEEE-754
-        uint8_t out[1 * 4];
-        encodeFloatArrayAsFloatBytes(values, 1, out);
-
-        struct os_mbuf *om = ble_hs_mbuf_from_flat(out, 1*4);
-        if (om == NULL) {
-            MODLOG_DFLT(ERROR, "error allocating mbuf for notification\n");
-            return;
-        }
-
-        rc = ble_gattc_notify_custom(conn_handle, distance_hrm_handle, om);
-        if (rc != 0) {
-            MODLOG_DFLT(ERROR, "error sending distance notification; rc=%d\n", rc);
+            MODLOG_DFLT(ERROR, "error sending DCI notification; rc=%d\n", rc);
         }
     }
 }
@@ -285,16 +259,10 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
                 .val_handle = &surface_classification_hrm_handle,
                 .flags = BLE_GATT_CHR_F_NOTIFY,
             }, {
-                /* Characteristic: takeover classification */
-                .uuid = BLE_UUID128_DECLARE(GATT_TAKEOVER_CLASSIFICATION_UUID),
-                .access_cb = gatt_svr_chr_access_takeover_classification,
-                .val_handle = &takeover_classification_hrm_handle,
-                .flags = BLE_GATT_CHR_F_NOTIFY,
-            }, {
-                /* Characteristic: distance */
-                .uuid = BLE_UUID128_DECLARE(GATT_DISTANCE_UUID),
-                .access_cb = gatt_svr_chr_access_distance,
-                .val_handle = &distance_hrm_handle,
+                /* Characteristic: DCI */
+                .uuid = BLE_UUID128_DECLARE(GATT_DCI_UUID),
+                .access_cb = gatt_svr_chr_access_dci,
+                .val_handle = &dci_hrm_handle,
                 .flags = BLE_GATT_CHR_F_NOTIFY,
             }, {
                 0, /* No more characteristics in this service */
@@ -307,7 +275,7 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
     },
 };
 
-// TODO: what is this for?
+// TODO: Needed?
 static int
 gatt_svr_chr_access_surface_classification(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg)
@@ -323,25 +291,10 @@ gatt_svr_chr_access_surface_classification(uint16_t conn_handle, uint16_t attr_h
     return BLE_ATT_ERR_UNLIKELY;
 }
 
-// TODO: what is this for?
-static int
-gatt_svr_chr_access_takeover_classification(uint16_t conn_handle, uint16_t attr_handle,
-                               struct ble_gatt_access_ctxt *ctxt, void *arg)
-{
-    uint16_t uuid;
-
-    uuid = ble_uuid_u16(ctxt->chr->uuid);
-
-    MODLOG_DFLT(INFO, "What do I do with this??");
-
-
-    assert(0);
-    return BLE_ATT_ERR_UNLIKELY;
-}
 
 // TODO: what is this for?
 static int
-gatt_svr_chr_access_distance(uint16_t conn_handle, uint16_t attr_handle,
+gatt_svr_chr_access_dci(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
     uint16_t uuid;
