@@ -58,10 +58,18 @@ bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &
     int orig_width = input_img->width;
 
     // crop to custom
+    
+    // 48x192px option, padded 32px on the bottom
+    // int x_min = 32;
+    // int x_max = x_min + 48;
+    // int y_min = 0;
+    // int y_max = y_min + 192;
+
+    // 48x192px option, padded 32px on the bottom and 54px on the left
     int x_min = 32;
-    int x_max = x_min + 48;
-    int y_min = 0;
-    int y_max = y_min + 192;
+    int x_max = x_min + 96;
+    int y_min = 54;
+    int y_max = y_min + 96;
     std::vector<int> crop_area = {x_min, y_min, x_max, y_max};
 
     output_img.height = y_max-y_min;
@@ -95,31 +103,43 @@ bool convert_surface_image(const dl::image::img_t* input_img, dl::image::img_t &
 }
 
 std::vector<dl::cls::result_t> run_surface_inference(const dl::image::img_t &input_img) {
-    uint32_t t0, t1;
+    uint32_t t0, t1, t2, t3, t4, t5;
     float delta;
-    t0 = esp_timer_get_time();
     
     if (!m_surface_preprocessor) {
         ESP_LOGE("SURFACE", "Preprocessor not initialized!");
         return {};
     }
+
+    t0 = esp_timer_get_time();
     m_surface_preprocessor->preprocess(input_img);
+    t1 = esp_timer_get_time();
+    delta = t1 - t0;
+    ESP_LOGD("SURFACE", "preprocessing in %8.0f us.\n", delta);
 
     if (!surface_model) {
         ESP_LOGE("SURFACE", "Model not initialized!");
         return {};
     }
+
+    t2 = esp_timer_get_time();
     surface_model->run(dl::RUNTIME_MODE_SINGLE_CORE);
-    
+    t3 = esp_timer_get_time();
+    delta = t3 - t2;
+    ESP_LOGD("SURFACE", "inference in %8.0f us.\n", delta);
+
     if (!m_surface_postprocessor) {
         ESP_LOGE("SURFACE", "Postprocessor not initialized!");
         return {};
     }
+    t4 = esp_timer_get_time();
     std::vector<dl::cls::result_t> &results = m_surface_postprocessor->postprocess();
+    t5 = esp_timer_get_time();
+    delta = t5 - t4;
+    ESP_LOGD("SURFACE", "postprocessing in %8.0f us.\n", delta);
 
-    t1 = esp_timer_get_time();
-    delta = t1 - t0;
-    ESP_LOGD("SURFACE", "inference in %8.0f us.\n", delta);
+    delta = t5 - t0;
+    ESP_LOGD("SURFACE", "total processing in %8.0f us.\n", delta);
 
     for (auto &res : results) {
         ESP_LOGD("SURFACE", "category: %s, score: %f\n", res.cat_name, res.score);

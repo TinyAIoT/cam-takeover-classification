@@ -1,2 +1,0 @@
-# For Testing a trained and compressed model
-This ESP-IDF project is for testing a the inference time of several trained models. The models to be tested need to be put in the `main/models`folder and loaded in the `main/app_main.cpp`. An sd-card is required on which the output of the performance tests is going to be saved. The images to be tested are in the `main/data` folder.

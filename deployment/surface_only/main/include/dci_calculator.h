@@ -12,7 +12,7 @@ extern "C" {
 
 // DCI configuration
 #define DCI_GRAVITY_THRESHOLD   1.0f                // 1g threshold
-#define DCI_MIN_SAMPLES         5                   // Minimum samples for valid DCI (arbitrary, can be tuned)
+#define DCI_MIN_SAMPLES         3                   // Minimum samples for valid DCI (arbitrary, can be tuned)
 
 // DCI result structure
 typedef struct {

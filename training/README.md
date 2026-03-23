@@ -1,1 +1,0 @@
-use the script `hpc/train.sh` to invoke a training cycle (written for hpc "palma" of uni Münster)

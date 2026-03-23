@@ -77,7 +77,8 @@
         "execution": "cpp",
         "ios": "cpp",
         "locale": "cpp",
-        "icm20948_spi.h": "c"
+        "icm20948_spi.h": "c",
+        "icm20948.h": "c"
     },
     "idf.flashType": "UART",
     "idf.port": "/dev/tty.usbmodem1101"
