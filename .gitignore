@@ -1,11 +1,9 @@
-data/classified
-data/demo
-data/real_raw
 */output
 */__pycache__
-*/.vscode
-*/managed_components
-*/build
-*/split_classified
+*/*/.vscode
+*/*/managed_components
+*/*/build
+*/*/dependencies.lock
+.DS_Store
 tmp
 results
