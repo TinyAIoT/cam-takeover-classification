@@ -1,3 +1,10 @@
+// Dynamic Comfort Index calculation based on method from:
+//      Bíl, M., Andrášik, R., & Kubeček, J. (2015). How comfortable are your cycling tracks? 
+//      A new method for objective bicycle vibration measurement. 
+//      Transportation Research Part C: Emerging Technologies, 56, 415–425. 
+//      https://doi.org/10.1016/j.trc.2015.05.007
+
+
 #include "dci_calculator.h"
 #include "esp_log.h"
 #include <math.h>
@@ -14,7 +21,6 @@ esp_err_t dci_calculate_gravity_reference(const imu_data_t* imu_samples, int cou
     }
     
     // Simple approach: Use the mean magnitude of acceleration vectors
-    // In practice, you might want to detect stationary periods
     float sum_magnitude = 0.0f;
     int valid_samples = 0;
     

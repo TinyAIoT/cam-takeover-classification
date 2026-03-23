@@ -25,7 +25,7 @@ typedef struct {
     int16_t mag_x, mag_y, mag_z;
     int16_t temp;
     bool valid;
-    uint64_t timestamp_us;  // Add timestamp for better data tracking
+    uint64_t timestamp_us; 
 } imu_data_t;
 
 // Simple API
@@ -39,7 +39,7 @@ esp_err_t imu_set_gyro_range(icm20948_gyro_config_1_fs_sel_e range);
 esp_err_t imu_enable_dlpf(bool enable);
 esp_err_t imu_reset(void);
 
-// Get current sensitivity values (useful for DCI calculation)
+// Get current sensitivity values
 float imu_get_accel_sensitivity(void);
 float imu_get_gyro_sensitivity(void);
 

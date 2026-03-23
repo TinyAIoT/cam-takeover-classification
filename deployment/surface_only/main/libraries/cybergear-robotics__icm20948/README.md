@@ -1,3 +1,5 @@
+#### Copied from https://github.com/cybergear-robotics/icm20948 with changes to i2c driver to fit newer versions of ESP-IDF and minor type bugfix
+
 # ICM-20948 component for ESP-IDF
 
 [![Component Registry](https://components.espressif.com/components/cybergear-robotics/icm20948/badge.svg)](https://components.espressif.com/components/cybergear-robotics/icm20948)
